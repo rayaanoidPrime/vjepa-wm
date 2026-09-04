@@ -1,0 +1,48 @@
+# ---------- Python ----------
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+env/
+.ipynb_checkpoints/
+
+# ---------- marimo / notebook outputs ----------
+__marimo__/
+*.html
+
+# ---------- Large artifacts (never commit; model weights live on HF / disk) ----------
+*.pth
+*.pt
+*.ckpt
+*.safetensors
+*.onnx
+*.bin
+
+# ---------- Data & run outputs (downloaded or generated) ----------
+# /data/ = repo-root mission data download dir. (vjepa_nav/data is a python
+# package and IS tracked; do not match it with a bare `data/` rule.)
+/data/
+logs/
+ckpt/
+runs/
+wandb/
+lightning_logs/
+
+# ---------- Env / secrets / local config ----------
+.env
+.env.*
+*.local
+.hf_token
+token*
+vjepa-*.json
+
+# ---------- Local agent tooling (pi / marimo-pair) ----------
+.agents/
+skills-lock.json
+
+# ---------- OS ----------
+.DS_Store
+Thumbs.db
+desktop.ini
