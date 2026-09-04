@@ -177,6 +177,9 @@ it rigorous and adds the eval that actually answers "can it predict the path".
   pipeline), *fine-tuned* (never trained from scratch at this data size). Deploy
   with **block-causal attention** so "encode up to t" is a property of the
   model, rollout is cheap and never re-encodes full clips (LeVJEPA).
+  *(2026-09-04 correction: default is FROZEN official encoder + predictor-only
+  training — see §2.7.1; encoder fine-tuning is deprecated until evidence for
+  it reappears.)*
 - **Task/mask:** context tubelets = frames ≤ t, target tubelets = frames > t
   (even t; tubelet-major boundary — see gotcha §2.5.2). Loss = V-JEPA 2.1 dense
   predictive loss (LN L1) vs the frozen EMA target encoder. Keep a small
@@ -339,6 +342,45 @@ once a value net exists.
    into `vjepa_wm/` (the notebook already has the video-path plumbing wanted).
 4. Read `SURVEYED_PAPERS.md` — "Track Unobserved States" (shapes the eval) and
    "LeVJEPA" (shapes the encoder-attention choice) first.
+
+### 2.7 Plan corrections — session 2026-09-04 (Phase-1 / Phase-2-lite results)
+
+1. **Default recipe: frozen official encoder + predictor-only training.**
+   Fine-tuning student + EMA drifts both away from the official feature space
+   used for scoring and LOSES to copy-last-context at every horizon
+   (0.81–0.82 vs 0.80–0.85 cosine). Freezing the encoder (teacher = official
+   V-JEPA 2.1, no EMA drift) makes trained prediction beat copy-last
+   (+1.6 pts @ stride 2, +3.5 pts @ stride 4; multi-env Phase-2-lite:
+   +7.4 / +9.3 pts on two held-out environments ICE-1, SPX-2).
+2. **Restated Phase-1 exit criterion.** "Causal val loss ≤ random at matched
+   budget" passed trivially and was the wrong test: at stride 1 the horizon is
+   degenerate and random ≈ causal in feature space. New criterion: causal must
+   beat BOTH copy-last-context AND random-mask on held-out envs at ≥1.6 s
+   horizon in motion-sensitive metrics (see 4), not only feature cosine.
+3. **Feature cosine is scene-dominated and cannot adjudicate dynamics.**
+   hdr_front mostly shows static terrain; whole-frame feature cosine / PSNR
+   are ~insensitive to causal-vs-copy (decode PSNR spread ≈ 1 dB). The
+   causal-vs-random question stays OPEN until motion/state metrics exist.
+4. **Eval priorities (Phase 2+).** Decode ceiling = teacher-latent decode;
+   model comparisons must use: robot-mask metrics (`hdr_front_mask`),
+   decoded-motion / flow error, path probe (latent → SE(2) displacement vs
+   DLIO odom), per-tubelet horizon decomposition, horizon extrapolation.
+   Whole-frame PSNR alone is NOT a decision metric.
+5. **Data facts:** hdr_front = 10 fps (ETH-1, ICE-1, SPX-*); default temporal
+   stride 4 (400 ms) ⇒ context ≈ 2.8 s, last target ≈ 3.2 s. Boundary
+   randomization over even {6,8,10} implemented; stride randomization deferred.
+6. **Phase-0 reorder:** action/proprio topics (`anymal_command_twist`,
+   `anymal_state_actuator`, `anymal_state_state_estimator`) move INTO Phase 0 so
+   the Phase-2 real pretrain can already be command-conditioned.
+7. **Superseded defaults:** the 20–30% random-mask mix and freeze-except-LN
+   guidance (§2.1 / risk 5) apply only if encoder fine-tuning returns; with the
+   frozen-encoder recipe the forgetting concern is moot.
+
+Where this leaves us: Phase-0 ~75% (images/timestamps/robot-masks(ETH-1)/fps
+done; action streams pending) — Phase-1 methodology complete (masker, unit
+ tests, baselines, recipe) — Phase 2-lite executed on 4 train envs; full Phase 2
+(all ~40 missions, action conditioning, robot-mask / path-probe / decoder
+ evals) is next.
 
 ---
 
