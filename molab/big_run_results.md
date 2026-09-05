@@ -61,3 +61,24 @@ Phase B (resumed; corpus growing as missions pulled):
 - Mission split beyond core 4 is approximate (remaining corpus treated as
   train); eval is strictly held-out ICE-1/SPX-2. Full per-mission split from
   configs/missions_split.csv should be applied for the production run.
+
+## Addendum 9: resumed run to step 8000 (2026-09-05, ~40 missions)
+Resumed from step4000 in a fresh sandbox; corpus grew 2762 -> 5552 records
+(~40 missions). Final step-8000 val:
+| env | cos | velRMSE true -> shuffled |
+|---|---|---|
+| ICE-1 | 0.8903 | 0.061 -> 0.097 (+58%) |
+| SPX-2 | 0.8538 | 0.052 -> 0.092 (+79%) |
+
+## Addendum 10: probe suite on step-8000 (3 s displacement, m)
+| cell | teacher | causal | copy |
+|---|---|---|---|
+| ICE-1 transient | 0.866 | 0.905 | 1.136 |
+| ICE-1 steady | 0.700 | 0.344 | 0.608 |
+| SPX-2 transient | 0.792 | 0.722 | 0.997 |
+| SPX-2 steady | 0.777 | 0.493 | 0.709 |
+Control-signal (ICE-1, re-sampled): velRMSE true 0.120 vs shuffled 0.245 (+105%).
+Causal beats copy in all cells; steady-far gains large.
+
+Checkpoints mirrored to HF: https://huggingface.co/rayaanoidpr/vjepa-wm-bigrun
+(big_run_step4000.pt, big_run_step8000.pt, log, README).
