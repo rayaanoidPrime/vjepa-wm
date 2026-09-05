@@ -1,0 +1,110 @@
+/tmp/uv-venv/lib/python3.13/site-packages/timm/models/layers/__init__.py:49: FutureWarning: Importing from timm.models.layers is deprecated, please import via timm.layers
+  warnings.warn(f"Importing from {__name__} is deprecated, please import via timm.layers", FutureWarning)
+resume: loaded big_run_step1200.pt step 1200
+big_run start | missions: 22 | train recs: 3042 | steps: 4000 | batch: 4
+/usr/local/lib/python3.13/contextlib.py:109: FutureWarning: `torch.backends.cuda.sdp_kernel()` is deprecated. In the future, this context manager will be removed. Please see `torch.nn.attention.sdpa_kernel()` for the new context manager, with updated signature.
+  self.gen = func(*args, **kwds)
+step  1250 | feat 0.3924 | vel 0.0123 | 2509 ms/step
+step  1300 | feat 0.3925 | vel 0.0167 | 2245 ms/step
+step  1350 | feat 0.4001 | vel 0.0228 | 2172 ms/step
+step  1400 | feat 0.3714 | vel 0.0100 | 2139 ms/step
+val ICE | cos 0.8707 | velRMSE true 0.0750 | shuf 0.1114
+val SPX2 | cos 0.8285 | velRMSE true 0.0849 | shuf 0.1064
+saved big_run_step 1400
+step  1450 | feat 0.3743 | vel 0.0041 | 2128 ms/step
+step  1500 | feat 0.3953 | vel 0.0230 | 2103 ms/step
+step 1500 rebuilt train recs: 3462
+step  1550 | feat 0.3616 | vel 0.0026 | 2092 ms/step
+step  1600 | feat 0.3535 | vel 0.0144 | 2077 ms/step
+val ICE | cos 0.8723 | velRMSE true 0.0669 | shuf 0.0928
+val SPX2 | cos 0.8318 | velRMSE true 0.0665 | shuf 0.0865
+saved big_run_step 1600
+step  1650 | feat 0.3725 | vel 0.0203 | 2077 ms/step
+step  1700 | feat 0.3674 | vel 0.0071 | 2066 ms/step
+step  1750 | feat 0.3926 | vel 0.0130 | 2056 ms/step
+step  1800 | feat 0.3963 | vel 0.0060 | 2046 ms/step
+val ICE | cos 0.8742 | velRMSE true 0.0808 | shuf 0.0970
+val SPX2 | cos 0.8326 | velRMSE true 0.0708 | shuf 0.0927
+saved big_run_step 1800
+step  1850 | feat 0.3913 | vel 0.0312 | 2049 ms/step
+step  1900 | feat 0.3717 | vel 0.0094 | 2045 ms/step
+step  1950 | feat 0.3549 | vel 0.0085 | 2040 ms/step
+step  2000 | feat 0.3831 | vel 0.0110 | 2036 ms/step
+val ICE | cos 0.8751 | velRMSE true 0.0747 | shuf 0.1055
+val SPX2 | cos 0.8347 | velRMSE true 0.0750 | shuf 0.0948
+saved big_run_step 2000
+step 2000 rebuilt train recs: 4012
+step  2050 | feat 0.3567 | vel 0.0035 | 2046 ms/step
+step  2100 | feat 0.3729 | vel 0.0077 | 2045 ms/step
+step  2150 | feat 0.4062 | vel 0.0757 | 2043 ms/step
+step  2200 | feat 0.3925 | vel 0.0219 | 2042 ms/step
+val ICE | cos 0.8747 | velRMSE true 0.0741 | shuf 0.1000
+val SPX2 | cos 0.8351 | velRMSE true 0.0673 | shuf 0.0907
+saved big_run_step 2200
+step  2250 | feat 0.3690 | vel 0.0093 | 2047 ms/step
+step  2300 | feat 0.3995 | vel 0.0034 | 2046 ms/step
+step  2350 | feat 0.3721 | vel 0.0128 | 2044 ms/step
+step  2400 | feat 0.3699 | vel 0.0025 | 2042 ms/step
+val ICE | cos 0.8773 | velRMSE true 0.0658 | shuf 0.0983
+val SPX2 | cos 0.8363 | velRMSE true 0.0886 | shuf 0.1136
+saved big_run_step 2400
+step  2450 | feat 0.3638 | vel 0.0100 | 2046 ms/step
+step  2500 | feat 0.3653 | vel 0.0162 | 2046 ms/step
+step 2500 rebuilt train recs: 4572
+step  2550 | feat 0.3857 | vel 0.0129 | 2046 ms/step
+step  2600 | feat 0.3847 | vel 0.0011 | 2044 ms/step
+val ICE | cos 0.8768 | velRMSE true 0.0622 | shuf 0.0968
+val SPX2 | cos 0.8374 | velRMSE true 0.0575 | shuf 0.0894
+saved big_run_step 2600
+step  2650 | feat 0.3629 | vel 0.0097 | 2045 ms/step
+step  2700 | feat 0.3951 | vel 0.0155 | 2042 ms/step
+step  2750 | feat 0.3387 | vel 0.0024 | 2040 ms/step
+step  2800 | feat 0.3495 | vel 0.0443 | 2038 ms/step
+val ICE | cos 0.8781 | velRMSE true 0.0960 | shuf 0.1204
+val SPX2 | cos 0.8396 | velRMSE true 0.1133 | shuf 0.1378
+saved big_run_step 2800
+step  2850 | feat 0.3670 | vel 0.0095 | 2041 ms/step
+step  2900 | feat 0.3428 | vel 0.0149 | 2039 ms/step
+step  2950 | feat 0.3446 | vel 0.0020 | 2037 ms/step
+step  3000 | feat 0.3544 | vel 0.0093 | 2035 ms/step
+val ICE | cos 0.8797 | velRMSE true 0.0860 | shuf 0.1134
+val SPX2 | cos 0.8401 | velRMSE true 0.1202 | shuf 0.1416
+saved big_run_step 3000
+step 3000 rebuilt train recs: 5132
+step  3050 | feat 0.3732 | vel 0.0060 | 2039 ms/step
+step  3100 | feat 0.3628 | vel 0.0062 | 2037 ms/step
+step  3150 | feat 0.3528 | vel 0.0073 | 2036 ms/step
+step  3200 | feat 0.3447 | vel 0.0057 | 2033 ms/step
+val ICE | cos 0.8792 | velRMSE true 0.0697 | shuf 0.0968
+val SPX2 | cos 0.8413 | velRMSE true 0.0797 | shuf 0.0996
+saved big_run_step 3200
+step  3250 | feat 0.3526 | vel 0.0024 | 2034 ms/step
+step  3300 | feat 0.3502 | vel 0.0075 | 2032 ms/step
+step  3350 | feat 0.3787 | vel 0.0026 | 2029 ms/step
+step  3400 | feat 0.3951 | vel 0.0160 | 2027 ms/step
+val ICE | cos 0.8810 | velRMSE true 0.1106 | shuf 0.1262
+val SPX2 | cos 0.8423 | velRMSE true 0.1081 | shuf 0.1314
+saved big_run_step 3400
+step  3450 | feat 0.3656 | vel 0.0137 | 2028 ms/step
+step  3500 | feat 0.3712 | vel 0.0098 | 2026 ms/step
+step 3500 rebuilt train recs: 5552
+step  3550 | feat 0.3775 | vel 0.0100 | 2027 ms/step
+step  3600 | feat 0.3591 | vel 0.0077 | 2025 ms/step
+val ICE | cos 0.8838 | velRMSE true 0.0863 | shuf 0.1141
+val SPX2 | cos 0.8416 | velRMSE true 0.0883 | shuf 0.1156
+saved big_run_step 3600
+step  3650 | feat 0.3694 | vel 0.0186 | 2026 ms/step
+step  3700 | feat 0.3620 | vel 0.0146 | 2024 ms/step
+step  3750 | feat 0.3611 | vel 0.0089 | 2024 ms/step
+step  3800 | feat 0.3685 | vel 0.0113 | 2023 ms/step
+val ICE | cos 0.8840 | velRMSE true 0.0588 | shuf 0.0947
+val SPX2 | cos 0.8448 | velRMSE true 0.0574 | shuf 0.0858
+saved big_run_step 3800
+step  3850 | feat 0.3711 | vel 0.0103 | 2023 ms/step
+step  3900 | feat 0.3414 | vel 0.0019 | 2022 ms/step
+step  3950 | feat 0.3574 | vel 0.0033 | 2021 ms/step
+step  4000 | feat 0.3452 | vel 0.0040 | 2020 ms/step
+val ICE | cos 0.8850 | velRMSE true 0.0571 | shuf 0.0917
+val SPX2 | cos 0.8447 | velRMSE true 0.0557 | shuf 0.0869
+saved big_run_step 4000
+big_run complete
