@@ -46,3 +46,7 @@ skills-lock.json
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# AMD/local artifacts
+ckpts/
+.venv/
