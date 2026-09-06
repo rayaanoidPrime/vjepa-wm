@@ -1,0 +1,1068 @@
+diff --git a/app/plan_common/datasets/__init__.py b/app/plan_common/datasets/__init__.py
+index 3323529..e3d44bd 100644
+--- a/app/plan_common/datasets/__init__.py
++++ b/app/plan_common/datasets/__init__.py
+@@ -79,6 +79,17 @@ DATA_STATS = {
+         "state_mean": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+         "state_std": [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+     },
++    "grandtour": {
++        "action_dim": 39,  # concat(commanded twist [3], joints [36])
++        "proprio_dim": 36,
++        "state_dim": 7,  # base pose xyz + quat(xyzw)
++        "action_mean": [0.0] * 39,
++        "action_std": [1.0] * 39,
++        "proprio_mean": [0.0] * 36,
++        "proprio_std": [1.0] * 36,
++        "state_mean": [0.0] * 7,
++        "state_std": [1.0] * 7,
++    },
+     "robocasa": {
+         "action_dim": 7,  # Same format as DROID
+         "proprio_dim": 7,
+diff --git a/app/plan_common/datasets/droid_dset.py b/app/plan_common/datasets/droid_dset.py
+index 59587af..e737add 100644
+--- a/app/plan_common/datasets/droid_dset.py
++++ b/app/plan_common/datasets/droid_dset.py
+@@ -12,13 +12,20 @@ from math import ceil
+ from pathlib import Path
+ from typing import Any, Sequence
+ 
+-import decord
++try:
++    import decord
++except ImportError:
++    decord = None  # no decord wheel on this platform; mp4 paths unavailable
+ import h5py
+ import numpy as np
+ import pandas as pd
+ import torch
+ import torch.utils.data
+-from decord import VideoReader, cpu
++try:
++    from decord import VideoReader, cpu
++except ImportError:
++    VideoReader = None
++    cpu = None
+ from einops import repeat
+ from scipy.spatial.transform import Rotation
+ from tqdm import tqdm
+@@ -26,7 +33,8 @@ from tqdm import tqdm
+ _GLOBAL_SEED = 0
+ logger = getLogger()
+ 
+-decord.bridge.set_bridge("native")
++if decord is not None:
++    decord.bridge.set_bridge("native")
+ 
+ 
+ def get_json(directory):
+diff --git a/app/plan_common/datasets/grandtour_dset.py b/app/plan_common/datasets/grandtour_dset.py
+new file mode 100644
+index 0000000..9ce5c11
+--- /dev/null
++++ b/app/plan_common/datasets/grandtour_dset.py
+@@ -0,0 +1,184 @@
++# Copyright (c) 2026, contributed for the GrandTour (ANYmal-D) project.
++# GrandTour episode dataset for JEPA-WMs (Option B / guide-faithful schema).
++#
++# File layout (mirrors franka_custom: <dset>/<name>/data/<task>/<run>/episode.h5):
++#   $JEPAWM_DSET/grand_tour/data/<mission>/episode.h5   (one h5 per mission)
++#       attrs: camera="hdr_front", n_frames, joint_ids
++#       cam_timestamp [N]        float64 seconds (camera ~10 fps)
++#       frames_bytes   [M]       uint8  concatenated resized JPEGs
++#       frames_offsets [N+1]     int64  byte offsets of each frame
++#       cmd_twist      [N,3]     [vx, vy, yaw_rate] commanded twist
++#       joints         [N,36]    12 joints x (position, velocity, torque)
++#       pose           [N,7]     base pose xyz + quat(xyzw) from dlio odometry
++#
++# __getitem__ returns a random contiguous window of `frames_per_clip` model frames
++# (stride computed from target fps vs true camera rate), mirroring the
++# DROIDVideoDataset item contract used by the real-robot training branch:
++#   (obs, actions, states, reward)  with obs = {"visual": TCHW float [0,1] pre-norm,
++#                                               "proprio": joints normalized [T,36]}
++#   actions = concat([cmd_twist, (joints-mean)/std])  [T, 39]  (guide: "3 or 3+36")
++#   states  = pose [T,7]
++import json
++import io
++from logging import getLogger
++from pathlib import Path
++
++import h5py
++import numpy as np
++import torch
++import torch.utils.data
++from PIL import Image
++
++logger = getLogger(__name__)
++
++
++def _nearest(ref_ts, query_ts):
++    i = np.searchsorted(ref_ts, query_ts)
++    i = np.clip(i, 0, len(ref_ts) - 1)
++    lo = np.maximum(i - 1, 0)
++    take = np.where(np.abs(ref_ts[lo] - query_ts) <= np.abs(ref_ts[i] - query_ts), lo, i)
++    return take
++
++
++class GrandTourEpisode:
++    """Lazy per-episode arrays; frame bytes read on demand."""
++
++    def __init__(self, path: str):
++        self.path = path
++        with h5py.File(path, "r") as h5:
++            self.n_frames = int(h5.attrs["n_frames"])
++            self.camera = str(h5.attrs.get("camera", "hdr_front"))
++            self.cam_ts = np.asarray(h5["cam_timestamp"][:], np.float64)
++            self.cmd = np.asarray(h5["cmd_twist"][:], np.float32)
++            self.joints = np.asarray(h5["joints"][:], np.float32)
++            self.pose = np.asarray(h5["pose"][:], np.float32)
++            off = np.asarray(h5["frames_offsets"][:], np.int64)
++            self._nbytes = int(h5["frames_bytes"].shape[0])
++        self.offsets = off
++        dts = np.diff(self.cam_ts)
++        dts = dts[dts > 0]
++        self.dt = float(np.median(dts)) if len(dts) else 0.1
++
++    def read_frame(self, h5, i: int) -> Image.Image:
++        s, e = int(self.offsets[i]), int(self.offsets[i + 1])
++        raw = h5["frames_bytes"][s:e].tobytes()
++        return Image.open(io.BytesIO(raw)).convert("RGB")
++
++
++class GrandTourVideoDataset(torch.utils.data.Dataset):
++    """Windowed clip sampler over GrandTour episodes (real-robot branch analog)."""
++
++    def __init__(
++        self,
++        data_path,
++        frames_per_clip=12,
++        fps=5,
++        transform=None,
++        mpk_manifest_patterns=None,
++        seed=None,
++        dset_fraction=1.0,
++        norm_rows=8192,
++        **kwargs,
++    ):
++        self.data_path = str(data_path)
++        self.frames_per_clip = int(frames_per_clip)
++        self.fps = float(fps)
++        self.transform = transform
++        self.seed = seed
++        self.rng = np.random.RandomState(seed)
++
++        patterns = list(mpk_manifest_patterns) if mpk_manifest_patterns else ["**/episode.h5"]
++        files = []
++        for pat in patterns:
++            files.extend(sorted(Path(self.data_path).glob(pat.lstrip("/"))))
++        if not files:
++            raise FileNotFoundError(f"No episode.h5 under {self.data_path} (patterns={patterns})")
++        self.samples = [str(p) for p in files]
++        if dset_fraction < 1.0:
++            n = max(1, int(len(self.samples) * dset_fraction))
++            self.samples = self.samples[:n]
++            logger.info(f"GrandTour: sliced to {n} episodes ({dset_fraction:.2f})")
++        logger.info(f"GrandTour: {len(self.samples)} episodes under {self.data_path}")
++
++        self.episodes = [GrandTourEpisode(p) for p in self.samples]
++        self.action_dim = 3 + 36            # concat(cmd_twist, joints)
++        self.proprio_dim = 36
++        self.state_dim = 7                  # base pose xyz + quat(xyzw)
++        self.seq_lengths = [e.n_frames for e in self.episodes]
++
++        # -- per-frame alignment check: action/state rows must match camera frames
++        for e in self.episodes:
++            assert len(e.cmd) == e.n_frames and len(e.joints) == e.n_frames and len(e.pose) == e.n_frames
++
++        # -- joint normalization statistics (sampled rows across episodes)
++        rs = np.random.RandomState(0)
++        rows = []
++        for e in self.episodes:
++            n = min(e.n_frames, max(1, norm_rows // max(1, len(self.episodes))))
++            idx = rs.randint(0, e.n_frames, size=n)
++            rows.append(e.joints[idx])
++        jr = np.concatenate(rows)
++        jm = jr.mean(0)
++        js = jr.std(0)
++        js[js < 1e-6] = 1.0
++        self.joint_mean = torch.as_tensor(jm, dtype=torch.float32)
++        self.joint_std = torch.as_tensor(js, dtype=torch.float32)
++
++        # identity stats for cmd / pose (kept raw)
++        z3 = torch.zeros(3); o3 = torch.ones(3)
++        self.action_mean = torch.cat([z3, self.joint_mean])
++        self.action_std = torch.cat([o3, self.joint_std])
++        self.proprio_mean = self.joint_mean
++        self.proprio_std = self.joint_std
++        self.state_mean = torch.zeros(self.state_dim)
++        self.state_std = torch.ones(self.state_dim)
++        self.actions = None
++        self.states = None
++        self.proprios = None
++        self.rewards = None
++
++    def get_seq_length(self, idx):
++        return self.episodes[idx].n_frames
++
++    def __len__(self):
++        return len(self.samples)
++
++    def _decode(self, ep, h5, idx):
++        T = len(idx)
++        ims = []
++        for i in idx:
++            ims.append(np.asarray(ep.read_frame(h5, i), np.uint8))
++        arr = np.stack(ims)  # T,H,W,3
++        buf = torch.as_tensor(arr, dtype=torch.float32) / 255.0
++        buf = buf.permute(0, 3, 1, 2).contiguous()  # T,C,H,W
++        if self.transform is not None:
++            buf = self.transform(buf)
++        return buf
++
++    def __getitem__(self, idx):
++        ep = self.episodes[idx]
++        fstp = max(1, int(round((1.0 / self.fps) / ep.dt))) if ep.dt > 0 else 1
++        need = self.frames_per_clip * fstp
++        if need > ep.n_frames:
++            raise RuntimeError(f"episode {ep.path} too short: {ep.n_frames} < {need}")
++        sf = self.rng.randint(0, ep.n_frames - need + 1)
++        fidx = sf + np.arange(self.frames_per_clip) * fstp
++        fidx = fidx.astype(np.int64)
++        with h5py.File(ep.path, "r") as h5:
++            buffer = self._decode(ep, h5, fidx)
++        joints = torch.as_tensor(ep.joints[fidx], dtype=torch.float32)
++        joints_n = (joints - self.joint_mean) / self.joint_std
++        cmd = torch.as_tensor(ep.cmd[fidx], dtype=torch.float32)
++        act = torch.cat([cmd, joints_n], dim=-1)     # T,39
++        pose = torch.as_tensor(ep.pose[fidx], dtype=torch.float32)
++        obs = {"visual": buffer, "proprio": joints_n}
++        return obs, act, pose, torch.tensor(0.0)
++
++    def __getstate__(self):
++        d = self.__dict__.copy()
++        d.pop("rng", None)
++        return d
++
++    def __setstate__(self, d):
++        self.__dict__.update(d)
++        self.rng = np.random.RandomState(self.seed)
+diff --git a/app/plan_common/datasets/pusht_dset.py b/app/plan_common/datasets/pusht_dset.py
+index de465bd..2029142 100644
+--- a/app/plan_common/datasets/pusht_dset.py
++++ b/app/plan_common/datasets/pusht_dset.py
+@@ -6,9 +6,15 @@ import pickle
+ from pathlib import Path
+ from typing import Callable, Optional
+ 
+-import decord
++try:
++    import decord
++except ImportError:
++    decord = None  # no decord wheel on this platform; mp4 paths unavailable
+ import torch
+-from decord import VideoReader
++try:
++    from decord import VideoReader
++except ImportError:
++    VideoReader = None
+ from einops import rearrange
+ 
+ from src.utils.logging import get_logger
+@@ -128,9 +134,9 @@ class PushTDataset(TrajDataset):
+ 
+     def get_frames(self, idx, frames):
+         vid_dir = self.data_path / "obses"
+-        decord.bridge.set_bridge("torch")
+-        reader = VideoReader(str(vid_dir / f"episode_{idx:03d}.mp4"), num_threads=1)
+-        act = self.actions[idx, frames]
++        if decord is not None:
++            decord.bridge.set_bridge("torch")
++            decord.bridge.set_bridge("torch")
+         state = self.states[idx, frames]
+         proprio = self.proprios[idx, frames]
+         shape = self.shapes[idx]
+diff --git a/app/plan_common/datasets/utils.py b/app/plan_common/datasets/utils.py
+index cf03aa0..433321c 100644
+--- a/app/plan_common/datasets/utils.py
++++ b/app/plan_common/datasets/utils.py
+@@ -8,18 +8,32 @@
+ from logging import getLogger
+ from typing import Callable
+ 
+-import decord
++try:
++    import decord
++except ImportError:
++    decord = None  # no decord wheel on this platform; mp4 paths unavailable
+ import torch
+ import torch.utils.data
+ 
+ from src.datasets.data_manager import init_data as init_data_src
+ 
+ from .droid_dset import DROIDVideoDataset
+-from .metaworld_hf_dset import load_metaworld_hf_slice_train_val
+-from .point_maze_dset import load_point_maze_slice_train_val
+-from .pusht_dset import load_pusht_slice_train_val
+-from .robocasa_dset import load_robocasa_slice_train_val
+-from .wall_dset import load_wall_slice_train_val
++from .grandtour_dset import GrandTourVideoDataset
++
++# Sim-loader imports are guarded: their heavy deps (datasets/pyarrow, mujoco, ...)
++# are only required when those datasets are actually used. (patched for GT env)
++def _lazy_import(name, attr):
++    try:
++        mod = __import__(f"{__name__}.{name}", fromlist=[attr])
++        return getattr(mod, attr)
++    except Exception:
++        return None
++
++load_metaworld_hf_slice_train_val = _lazy_import("metaworld_hf_dset", "load_metaworld_hf_slice_train_val")
++load_point_maze_slice_train_val   = _lazy_import("point_maze_dset", "load_point_maze_slice_train_val")
++load_pusht_slice_train_val        = _lazy_import("pusht_dset", "load_pusht_slice_train_val")
++load_robocasa_slice_train_val     = _lazy_import("robocasa_dset", "load_robocasa_slice_train_val")
++load_wall_slice_train_val         = _lazy_import("wall_dset", "load_wall_slice_train_val")
+ 
+ # ----------------
+ 
+@@ -121,6 +135,31 @@ def init_data(
+                 )
+             datasets = {"train": dataset, "valid": val_dataset}
+             traj_dsets = {"train": dataset, "valid": val_dataset}
++        elif all("grand_tour" in p for p in data_paths):
++            # GrandTour real-robot dataset (Option B schema): commanded twist + joints
++            dataset = GrandTourVideoDataset(
++                data_path=data_paths[0],
++                frames_per_clip=dataset_fpcs[0],
++                transform=transform,
++                fps=fps,
++                mpk_manifest_patterns=mpk_manifest_patterns,
++                seed=seed,
++                dset_fraction=dset_fraction,
++            )
++            if val_data_paths:
++                val_dataset = GrandTourVideoDataset(
++                    data_path=val_data_paths[0],
++                    frames_per_clip=val_dataset_fpcs[0],
++                    transform=transform,
++                    fps=fps,
++                    mpk_manifest_patterns=mpk_manifest_patterns,
++                    seed=(seed or 0) + 1,
++                    dset_fraction=val_dset_fraction,
++                )
++            else:
++                val_dataset = dataset
++            datasets = {"train": dataset, "valid": val_dataset}
++            traj_dsets = {"train": dataset, "valid": val_dataset}
+         elif all("metaworld" in p.lower() for p in data_paths) or all("tdmpc2" in p for p in data_paths):
+             datasets, traj_dsets = load_metaworld_hf_slice_train_val(
+                 transform,
+@@ -286,7 +325,8 @@ def init_data(
+             viz_val_data_loader,
+         )
+     else:
+-        decord.bridge.set_bridge("native")
++        if decord is not None:
++            decord.bridge.set_bridge("native")
+         data_loader, dist_sampler = init_data_src(
+             data=dataset_type,
+             root_path=data_paths,
+diff --git a/app/vjepa_wm/train.py b/app/vjepa_wm/train.py
+index a9c9378..4348606 100644
+--- a/app/vjepa_wm/train.py
++++ b/app/vjepa_wm/train.py
+@@ -1441,7 +1441,10 @@ def main(args, resume_preempt=False):
+                         )
+                     else:
+                         checkpoint = pref_tag + f"latest.{latest_format}"
+-                    launch_planning_evals(
++                    if cfgs_plan_evals is None or not cfgs_plan_evals.get("eval_cfg_paths"):
++                        logger.info("skip planning evals: no eval_cfg_paths configured")
++                    else:
++                        launch_planning_evals(
+                         rank,
+                         epoch + 1,
+                         folder,
+diff --git a/configs/vjepa_wm/grandtour_sweep/gt_v0_12f_fps5_r224_dv2vits_AdaLN_d6_2roll_1n.yaml b/configs/vjepa_wm/grandtour_sweep/gt_v0_12f_fps5_r224_dv2vits_AdaLN_d6_2roll_1n.yaml
+new file mode 100644
+index 0000000..93d4808
+--- /dev/null
++++ b/configs/vjepa_wm/grandtour_sweep/gt_v0_12f_fps5_r224_dv2vits_AdaLN_d6_2roll_1n.yaml
+@@ -0,0 +1,199 @@
++app: vjepa_wm
++nodes: 1
++tasks_per_node: 1
++cpus_per_task: 8
++folder: ${JEPAWM_LOGS}/grandtour_sweep/gt_v0_12f_fps5_r224_dv2vits_AdaLN_d6_2roll_1n
++data:
++  dataset_type: custom
++  datasets:
++    - GrandTour
++  datasets_weights: null
++  seed: 234
++  img_size: 224
++  validation:
++    val_datasets:
++      - GrandTour
++    num_frames_val: 5
++    val_dataset_batch_size: 4
++    val_dataset_drop_last: false
++    val_dataset_fpcs: [12]
++    val_dataset_camera_views: ["hdr_front"]
++    val_viz_rank0_loader: true
++  loader:
++    batch_size: 2
++    num_workers: 6
++    pin_mem: true
++    persistent_workers: true
++  custom:
++    split_ratio: null
++    frameskip: 1
++    action_skip: 1
++    state_skip: 1
++    normalize_action: false
++    traj_subset: true
++    filter_first_episodes: null
++    filter_tasks: null
++    num_hist: null
++    num_pred: null
++    with_reward: null
++    custom_teleop_dset: null
++  droid:
++    camera_frame: null
++    camera_views:
++      - hdr_front
++    droid_to_rcasa_action_format: 1
++    rcasa_to_droid_action_format: null
++    fps: 5
++    dataset_fpcs: [12]
++    mpk_manifest_patterns:
++      - '**/episode.h5'
++data_aug:
++  auto_augment: false
++  random_horizontal_flip: false
++  motion_shift: false
++  random_resize_aspect_ratio:
++  - 1.
++  - 1.
++  random_resize_scale:
++  - 0.6
++  - 1.0
++  reprob: 0.0
++  normalize: [[0.485, 0.456, 0.406], [0.229, 0.224, 0.225]]
++logging:
++  write_tag: jepa
++  wandb:
++    use_wandb: false
++    debug: false
++    project: vjepa_wm
++    disable_wandb_media: true
++    log_media_locally: true
++loss:
++  cos_loss_weight: 0.0
++  l1_loss_weight: 0.0
++  l2_loss_weight: 1.0
++  smooth_l1_loss_weight: 0.0
++meta:
++  plan_only_eval_mode: false
++  light_eval_only_mode: false
++  unroll_decode_eval_only_mode: false
++  quick_debug: false
++  freeze_encoder: true
++  load_checkpoint: false
++  load_opt_scale_epoch: true
++  read_checkpoint: null
++  seed: 234
++  eval_freq: 50
++  light_eval_freq: 200
++  save_every_freq: 1
++  dtype: bfloat16
++  data_traj_rollout_eval:
++    do_data_traj_rollout_eval: false
++    data_traj_eval_rollout_steps: 6
++    data_traj_decode_gt: false
++    data_traj_eval_ctxt_window: 3
++  energy_landscape_eval:
++    do_energy_landscape_eval: false
++    energy_landscape_rollout_steps: 1
++    energy_landscape_ctxt_window: 3
++model:
++  grid_size: 16
++  tubelet_size_enc: 1
++  use_activation_checkpointing: false
++  action_conditioning: token
++  proprio_encoding: none
++  num_frames_pred: 12
++  visual_encoder:
++    enc_type: dino
++    enc_version: dinov2_vits14
++    pretrain_enc_path: null
++    pretrain_enc_ckpt_key: null
++    embed_dim: 384
++    enc_use_rope: null
++    enc_name: null
++    use_sdpa_enc: null
++    num_frames_enc: null
++    uniform_power: true
++  action_encoder:
++    action_tokens: 1
++    action_emb_dim: 0
++    act_mlp: false
++    action_encoder_inpred: true
++  proprio_encoder:
++    proprio_tokens: 0
++    proprio_emb_dim: 0
++    prop_mlp: false
++    proprio_encoder_inpred: false
++  predictor:
++    tubelet_size: 1
++    pred_num_heads: 6
++    pred_depth: 6
++    pred_embed_dim: 384
++    pred_use_extrinsics: false
++    pred_type: AdaLN
++    act_pred_projector: null
++    use_SiLU: null
++    use_rope: true
++  wm_encoding:
++    batchify_video: true
++    dup_image: false
++    normalize_reps: false
++  rollout_cfg:
++    rollout_steps: 2
++    train_rollout_prefixes: random
++    rollout_stop_gradient: true
++    ctxt_window_train_rollout: 3
++    do_parallel_rollout: null
++    do_sequential_rollout: true
++    prepend_gt: null
++    sampling_scheduler:
++      type: linear
++      start: 0.
++      end: 0.
++  attn:
++    local_window_time: -1
++    local_window_h: -1
++    local_window_w: -1
++  heads_cfg:
++    architectures: {}
++    pretrain_dec_path:
++optimization:
++  main_optimizer: transition_model
++  train_heads: false
++  transition_model:
++    iterations_per_epoch: 250
++    ipe_scale: 1.
++    clip_grad: 1
++    use_radamw: false
++    betas: [0.9, 0.995]
++    eps: 1.e-8
++    weight_decay: 1.e-7
++    final_weight_decay: 1.e-6
++    num_epochs: 4
++    warmup: 0
++    start_lr: 5.e-4
++    ref_lr: 5.e-4
++    final_lr: 5.e-4
++    mixed_precision: true
++evals:
++  separate: false
++  decode: false
++  eval_episodes: 16
++  nodes: 1
++  low_pri: true
++  obs: rgb
++  alpha: 0
++  override_cfgs_data: true
++  override_datasets: true
++  wrapper_kwargs:
++    ctxt_window: 2
++  dump_eval_configs: false
++  eval_cfg_paths: []
++unroll_decode_evals:
++  wrapper_kwargs:
++    ctxt_window: 2
++  specific_video: false
++  specific_video_path:
++  play_in_reverse: false
++  save_decoding_only: true
++  repeat_hardcode_act: 1
++  obs: rgb
+diff --git a/configs/vjepa_wm/grandtour_sweep/gt_v0_SMOKE.yaml b/configs/vjepa_wm/grandtour_sweep/gt_v0_SMOKE.yaml
+new file mode 100644
+index 0000000..a4ec2ef
+--- /dev/null
++++ b/configs/vjepa_wm/grandtour_sweep/gt_v0_SMOKE.yaml
+@@ -0,0 +1,200 @@
++app: vjepa_wm
++nodes: 1
++tasks_per_node: 1
++cpus_per_task: 8
++folder: ${JEPAWM_LOGS}/grandtour_sweep/gt_v0_SMOKE
++data:
++  dataset_type: custom
++  datasets:
++    - GrandTour
++  datasets_weights: null
++  seed: 234
++  img_size: 224
++  validation:
++    val_datasets:
++      - GrandTour
++    num_frames_val: 5
++    val_dataset_batch_size: 4
++    val_dataset_drop_last: false
++    val_dataset_fpcs: [12]
++    val_dataset_camera_views: ["hdr_front"]
++    val_viz_rank0_loader: true
++  loader:
++    batch_size: 2
++    num_workers: 0
++    drop_last: false
++    pin_mem: true
++    persistent_workers: true
++  custom:
++    split_ratio: null
++    frameskip: 1
++    action_skip: 1
++    state_skip: 1
++    normalize_action: false
++    traj_subset: true
++    filter_first_episodes: null
++    filter_tasks: null
++    num_hist: null
++    num_pred: null
++    with_reward: null
++    custom_teleop_dset: null
++  droid:
++    camera_frame: null
++    camera_views:
++      - hdr_front
++    droid_to_rcasa_action_format: 1
++    rcasa_to_droid_action_format: null
++    fps: 5
++    dataset_fpcs: [12]
++    mpk_manifest_patterns:
++      - '**/episode.h5'
++data_aug:
++  auto_augment: false
++  random_horizontal_flip: false
++  motion_shift: false
++  random_resize_aspect_ratio:
++  - 1.
++  - 1.
++  random_resize_scale:
++  - 0.6
++  - 1.0
++  reprob: 0.0
++  normalize: [[0.485, 0.456, 0.406], [0.229, 0.224, 0.225]]
++logging:
++  write_tag: jepa
++  wandb:
++    use_wandb: false
++    debug: false
++    project: vjepa_wm
++    disable_wandb_media: true
++    log_media_locally: true
++loss:
++  cos_loss_weight: 0.0
++  l1_loss_weight: 0.0
++  l2_loss_weight: 1.0
++  smooth_l1_loss_weight: 0.0
++meta:
++  plan_only_eval_mode: false
++  light_eval_only_mode: false
++  unroll_decode_eval_only_mode: false
++  quick_debug: true
++  freeze_encoder: true
++  load_checkpoint: false
++  load_opt_scale_epoch: true
++  read_checkpoint: null
++  seed: 234
++  eval_freq: 50
++  light_eval_freq: 200
++  save_every_freq: 1
++  dtype: bfloat16
++  data_traj_rollout_eval:
++    do_data_traj_rollout_eval: false
++    data_traj_eval_rollout_steps: 6
++    data_traj_decode_gt: false
++    data_traj_eval_ctxt_window: 3
++  energy_landscape_eval:
++    do_energy_landscape_eval: false
++    energy_landscape_rollout_steps: 1
++    energy_landscape_ctxt_window: 3
++model:
++  grid_size: 16
++  tubelet_size_enc: 1
++  use_activation_checkpointing: false
++  action_conditioning: token
++  proprio_encoding: none
++  num_frames_pred: 12
++  visual_encoder:
++    enc_type: dino
++    enc_version: dinov2_vits14
++    pretrain_enc_path: null
++    pretrain_enc_ckpt_key: null
++    embed_dim: 384
++    enc_use_rope: null
++    enc_name: null
++    use_sdpa_enc: null
++    num_frames_enc: null
++    uniform_power: true
++  action_encoder:
++    action_tokens: 1
++    action_emb_dim: 0
++    act_mlp: false
++    action_encoder_inpred: true
++  proprio_encoder:
++    proprio_tokens: 0
++    proprio_emb_dim: 0
++    prop_mlp: false
++    proprio_encoder_inpred: false
++  predictor:
++    tubelet_size: 1
++    pred_num_heads: 6
++    pred_depth: 6
++    pred_embed_dim: 384
++    pred_use_extrinsics: false
++    pred_type: AdaLN
++    act_pred_projector: null
++    use_SiLU: null
++    use_rope: true
++  wm_encoding:
++    batchify_video: true
++    dup_image: false
++    normalize_reps: false
++  rollout_cfg:
++    rollout_steps: 2
++    train_rollout_prefixes: random
++    rollout_stop_gradient: true
++    ctxt_window_train_rollout: 3
++    do_parallel_rollout: null
++    do_sequential_rollout: true
++    prepend_gt: null
++    sampling_scheduler:
++      type: linear
++      start: 0.
++      end: 0.
++  attn:
++    local_window_time: -1
++    local_window_h: -1
++    local_window_w: -1
++  heads_cfg:
++    architectures: {}
++    pretrain_dec_path:
++optimization:
++  main_optimizer: transition_model
++  train_heads: false
++  transition_model:
++    iterations_per_epoch: 3
++    ipe_scale: 1.
++    clip_grad: 1
++    use_radamw: false
++    betas: [0.9, 0.995]
++    eps: 1.e-8
++    weight_decay: 1.e-7
++    final_weight_decay: 1.e-6
++    num_epochs: 1
++    warmup: 0
++    start_lr: 5.e-4
++    ref_lr: 5.e-4
++    final_lr: 5.e-4
++    mixed_precision: true
++evals:
++  separate: false
++  decode: false
++  eval_episodes: 16
++  nodes: 1
++  low_pri: true
++  obs: rgb
++  alpha: 0
++  override_cfgs_data: true
++  override_datasets: true
++  wrapper_kwargs:
++    ctxt_window: 2
++  dump_eval_configs: false
++  eval_cfg_paths: []
++unroll_decode_evals:
++  wrapper_kwargs:
++    ctxt_window: 2
++  specific_video: false
++  specific_video_path:
++  play_in_reverse: false
++  save_decoding_only: true
++  repeat_hardcode_act: 1
++  obs: rgb
+diff --git a/configs/vjepa_wm/grandtour_sweep/gt_v0_step2_vm2m.yaml b/configs/vjepa_wm/grandtour_sweep/gt_v0_step2_vm2m.yaml
+new file mode 100644
+index 0000000..b39445d
+--- /dev/null
++++ b/configs/vjepa_wm/grandtour_sweep/gt_v0_step2_vm2m.yaml
+@@ -0,0 +1,237 @@
++app: vjepa_wm
++nodes: 1
++tasks_per_node: 1
++cpus_per_task: 8
++folder: ${JEPAWM_LOGS}/grandtour_sweep/gt_v0_step2_vm2m
++data:
++  dataset_type: custom
++  datasets:
++    - GrandTour
++  datasets_weights: null
++  seed: 234
++  img_size: 224
++  validation:
++    val_datasets:
++      - GrandTour
++    num_frames_val: 5
++    val_dataset_batch_size: 4
++    val_dataset_drop_last: false
++    val_dataset_fpcs: [12]
++    val_dataset_camera_views: ["hdr_front"]
++    val_viz_rank0_loader: true
++  loader:
++    batch_size: 2
++    num_workers: 6
++    pin_mem: true
++    persistent_workers: true
++  custom:
++    split_ratio: null
++    frameskip: 1
++    action_skip: 1
++    state_skip: 1
++    normalize_action: false
++    traj_subset: true
++    filter_first_episodes: null
++    filter_tasks: null
++    num_hist: null
++    num_pred: null
++    with_reward: null
++    custom_teleop_dset: null
++  droid:
++    camera_frame: null
++    camera_views:
++      - hdr_front
++    droid_to_rcasa_action_format: 1
++    rcasa_to_droid_action_format: null
++    fps: 5
++    dataset_fpcs: [12]
++    mpk_manifest_patterns:
++      - '**/episode.h5'
++data_aug:
++  auto_augment: false
++  random_horizontal_flip: false
++  motion_shift: false
++  random_resize_aspect_ratio:
++  - 1.
++  - 1.
++  random_resize_scale:
++  - 0.6
++  - 1.0
++  reprob: 0.0
++  normalize: [[0.485, 0.456, 0.406], [0.229, 0.224, 0.225]]
++logging:
++  write_tag: jepa
++  wandb:
++    use_wandb: false
++    debug: false
++    project: vjepa_wm
++    disable_wandb_media: true
++    log_media_locally: true
++loss:
++  cos_loss_weight: 0.0
++  l1_loss_weight: 0.0
++  l2_loss_weight: 1.0
++  smooth_l1_loss_weight: 0.0
++meta:
++  plan_only_eval_mode: false
++  light_eval_only_mode: false
++  unroll_decode_eval_only_mode: false
++  quick_debug: false
++  freeze_encoder: true
++  load_checkpoint: false
++  load_opt_scale_epoch: true
++  read_checkpoint: null
++  seed: 234
++  eval_freq: 50
++  light_eval_freq: 200
++  save_every_freq: 1
++  dtype: bfloat16
++  data_traj_rollout_eval:
++    do_data_traj_rollout_eval: false
++    data_traj_eval_rollout_steps: 6
++    data_traj_decode_gt: false
++    data_traj_eval_ctxt_window: 3
++  energy_landscape_eval:
++    do_energy_landscape_eval: false
++    energy_landscape_rollout_steps: 1
++    energy_landscape_ctxt_window: 3
++model:
++  grid_size: 16
++  tubelet_size_enc: 1
++  use_activation_checkpointing: false
++  action_conditioning: token
++  proprio_encoding: none
++  num_frames_pred: 12
++  visual_encoder:
++    enc_type: dino
++    enc_version: dinov2_vits14
++    pretrain_enc_path: null
++    pretrain_enc_ckpt_key: null
++    embed_dim: 384
++    enc_use_rope: null
++    enc_name: null
++    use_sdpa_enc: null
++    num_frames_enc: null
++    uniform_power: true
++  action_encoder:
++    action_tokens: 1
++    action_emb_dim: 0
++    act_mlp: false
++    action_encoder_inpred: true
++  proprio_encoder:
++    proprio_tokens: 0
++    proprio_emb_dim: 0
++    prop_mlp: false
++    proprio_encoder_inpred: false
++  predictor:
++    tubelet_size: 1
++    pred_num_heads: 6
++    pred_depth: 6
++    pred_embed_dim: 384
++    pred_use_extrinsics: false
++    pred_type: AdaLN
++    act_pred_projector: null
++    use_SiLU: null
++    use_rope: true
++  wm_encoding:
++    batchify_video: true
++    dup_image: false
++    normalize_reps: false
++  rollout_cfg:
++    rollout_steps: 2
++    train_rollout_prefixes: random
++    rollout_stop_gradient: true
++    ctxt_window_train_rollout: 3
++    do_parallel_rollout: null
++    do_sequential_rollout: true
++    prepend_gt: null
++    sampling_scheduler:
++      type: linear
++      start: 0.
++      end: 0.
++  attn:
++    local_window_time: -1
++    local_window_h: -1
++    local_window_w: -1
++
++  heads_cfg:
++    architectures:
++      image_head:
++        kind: vit
++        config:
++          patch_size: 8
++          in_chans: 3
++          img_size: [224, 224]
++          embed_dim: 384
++          decoder_embed_dim: 384
++          depth: 8
++          num_heads: 12
++          mlp_ratio: 4.0
++          num_views: 1
++          use_activation_checkpointing: false
++          use_lpips: true
++          pixelloss_weight: 10
++          perceptual_weight: 1
++    pretrain_dec_path: null
++
++optimization:
++  main_optimizer: image_head
++  train_heads: true
++  transition_model:
++    iterations_per_epoch: 250
++    ipe_scale: 1.
++    clip_grad: 1
++    use_radamw: false
++    betas: [0.9, 0.995]
++    eps: 1.e-8
++    weight_decay: 1.e-7
++    final_weight_decay: 1.e-6
++    num_epochs: 3
++    warmup: 0
++    start_lr: 5.e-4
++    ref_lr: 5.e-4
++    final_lr: 5.e-4
++    mixed_precision: true
++  heads:
++    train_predictor: false
++    train_heads_on_predictor: false
++    image_head:
++      use_radamw: false
++      betas: [0.9, 0.999]
++      eps: 1e-8
++      ipe_scale: 1.0
++      weight_decay: 0.05
++      final_weight_decay: 0.05
++      final_lr: 1.0e-5
++      start_lr: 0.0
++      ref_lr: 5.0e-4
++      warmup: 0
++      num_epochs: 3
++      iterations_per_epoch: 250
++      clip_grad: 1
++      mixed_precision: true
++
++
++evals:
++  separate: false
++  decode: false
++  eval_episodes: 16
++  nodes: 1
++  low_pri: true
++  obs: rgb
++  alpha: 0
++  override_cfgs_data: true
++  override_datasets: true
++  wrapper_kwargs:
++    ctxt_window: 2
++  dump_eval_configs: false
++  eval_cfg_paths: []
++unroll_decode_evals:
++  wrapper_kwargs:
++    ctxt_window: 2
++  specific_video: false
++  specific_video_path:
++  play_in_reverse: false
++  save_decoding_only: true
++  repeat_hardcode_act: 1
++  obs: rgb
+diff --git a/src/datasets/video_dataset.py b/src/datasets/video_dataset.py
+index 4d2ef55..75e4a40 100644
+--- a/src/datasets/video_dataset.py
++++ b/src/datasets/video_dataset.py
+@@ -14,7 +14,11 @@ import numpy as np
+ import pandas as pd
+ import torch
+ import torchvision
+-from decord import VideoReader, cpu
++try:
++    from decord import VideoReader, cpu
++except ImportError:
++    VideoReader = None
++    cpu = None
+ 
+ from src.datasets.utils.dataloader import ConcatIndices, MonitoredDataset, NondeterministicDataLoader
+ from src.datasets.utils.weighted_sampler import DistributedWeightedSampler
+diff --git a/src/utils/cluster.py b/src/utils/cluster.py
+index 3f1be4c..d4a600e 100644
+--- a/src/utils/cluster.py
++++ b/src/utils/cluster.py
+@@ -81,6 +81,7 @@ def _build_dataset_paths():
+             "Robocasa": f"{dataset_root}/robocasa/",
+             "DROID": f"{dataset_root}/DROID/droid_paths.csv",
+             "Franka_hf": f"{dataset_root}/franka_custom",
++            "GrandTour": f"{dataset_root}/grand_tour",
+             # Video datasets
+             "K400": f"{dataset_root}/kinetics400/k400_train_paths.csv",
+             "K400_val": f"{dataset_root}/kinetics400/k400_val_paths.csv",

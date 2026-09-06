@@ -1,0 +1,8 @@
+# data / env artifacts (see grandtour/env.sh for the canonical paths)
+.venv/
+__pycache__/
+*.pyc
+data/
+*.pth.tar
+*.egg-info/
+.ipynb_checkpoints/

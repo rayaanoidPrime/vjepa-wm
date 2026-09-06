@@ -1,0 +1,47 @@
+# Curated dependency list for the GrandTour JEPA-WM (jepa-wms) pipeline.
+# Installed into a python 3.10 venv by setup.sh (uv).
+# Notes:
+#  - torch/torchvision resolve to the latest cu130 PyPI build for py3.10.
+#  - decord is intentionally absent: no Linux wheels exist and the GrandTour
+#    data path does not need it (imports are patched to be lazy).
+#  - torchcodec is only used by the metaworld loader (unused here).
+#  - Simulation-only deps of jepa-wms (mujoco/metaworld/d4rl/robocasa...) are
+#    not needed for the real-robot GrandTour recipe.
+
+torch
+torchvision
+tensordict
+torchrl
+numpy
+pandas
+h5py
+einops
+scipy
+scikit-image
+pillow
+timm
+tqdm
+termcolor
+matplotlib
+seaborn
+plotly
+hydra-core
+omegaconf
+ruamel.yaml
+wandb
+submitit
+huggingface_hub
+datasets
+opencv-python
+lpips
+imageio
+imageio-ffmpeg
+moviepy
+mediapy
+gym==0.23.1
+gymnasium
+pygame
+pymunk==6.8.0
+shapely
+nevergrad
+clusterscope
