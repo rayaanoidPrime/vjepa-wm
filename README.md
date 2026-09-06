@@ -73,8 +73,10 @@ and visualization scripts under `grandtour/scripts/` reproduce them.
 | New dataset class | `jepa-wms/app/plan_common/datasets/grandtour_dset.py` (added by patch) |
 | Config | `jepa-wms/configs/vjepa_wm/grandtour_sweep/gt_v0_*.yaml` (added by patch) |
 | Training | `python -m app.main --fname <cfg> --debug` (see README there) |
-| Eval (copy baseline) | `grandtour/scripts/eval_copy_baseline.py` |
-| Future-frame visualization | `grandtour/scripts/viz_future_frames.py` (step-2 decoder head) |
+| Eval (copy baseline) | `grandtour/scripts/eval_copy_baseline.py` (set `GT_RUN` to eval a scaled run) |
+| Counterfactual action eval (guide item 9) | `grandtour/scripts/eval_counterfactual.py` |
+| 20-frame future GIFs | `grandtour/scripts/make_gifs.py` |
+| Future-frame sheets | `grandtour/scripts/viz_future_frames.py` (step-2 decoder head) |
 
 ## License notes
 
@@ -85,3 +87,9 @@ and visualization scripts under `grandtour/scripts/` reproduce them.
   unless they embed upstream code.
 
 GrandTour data: CC BY-SA 4.0 (cite Frey, Tuna et al., arXiv:2602.18164).
+
+## Checkpoints
+
+Trained world-model and decoder-head checkpoints (v0, v1 runs) are published
+on Hugging Face: https://huggingface.co/rayaanoidPrime/vjepa-wm-grandtour
+(results in `docs/EXPERIMENTS.md`).

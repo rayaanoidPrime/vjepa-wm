@@ -35,8 +35,9 @@ from app.vjepa_wm.utils import init_video_model
 from app.vjepa_wm.video_wm import VideoWM
 
 DEVICE = "cuda:0"
-CFG_REL = "configs/vjepa_wm/grandtour_sweep/gt_v0_12f_fps5_r224_dv2vits_AdaLN_d6_2roll_1n.yaml"
-RUN_NAME = "gt_v0_12f_fps5_r224_dv2vits_AdaLN_d6_2roll_1n"
+CFG_REL = os.environ.get("GT_CFG_REL", "configs/vjepa_wm/grandtour_sweep/gt_v0_12f_fps5_r224_dv2vits_AdaLN_d6_2roll_1n.yaml")
+RUN_NAME = os.environ.get("GT_RUN", "gt_v0_12f_fps5_r224_dv2vits_AdaLN_d6_2roll_1n")
+# e.g. GT_RUN=gt_v1_12f_fps5_r224_dv2vitl_AdaLN_d12c_2roll_1n to evaluate the scaled model
 BATCH = 4
 CTX = 4        # context frames for the rollout
 HROLL = 6      # rollout steps

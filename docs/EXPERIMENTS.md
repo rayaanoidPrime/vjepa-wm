@@ -65,3 +65,61 @@ generalization to unseen weather/terrain was not tested in this run.
 - Held-out/val split: with only 4 missions, validation currently samples the
   same missions. Add more missions and point `data.validation.val_datasets` at
   a separate directory when scaling.
+
+
+## Phase 1b - scaled model (gt_v1) + long training
+
+- Config: `gt_v1_12f_fps5_r224_dv2vitl_AdaLN_d12c_2roll_1n` (adds the patch's
+  `gt_v1_*.yaml`): frozen DINOv2 **ViT-L/14** (304 M), AdaLN predictor
+  **depth 12 / embed 1024 / heads 16** (229 M), **causal** time-window-3
+  attention (`attn.local_window_time: 3`), same 12-frame @5 fps windows.
+- 1600 steps (10 epochs x 160), epoch-avg loss 1.25 -> 0.63. A longer run
+  continues by resuming (`gt_v1_resume20.yaml`, load_checkpoint: true).
+- Copy-baseline eval (24 windows, ctx=4):
+
+  | metric | model mse | copy mse | ratio |
+  |---|---|---|---|
+  | teacher 1-step | 0.709 | 0.871 | 0.81 |
+  | rollout h=1 | 0.695 | 0.849 | 0.82 |
+  | rollout h=2 | 0.849 | 1.136 | 0.75 |
+  | rollout h=3 | 0.936 | 1.240 | 0.76 |
+  | rollout h=4 | 1.022 | 1.329 | 0.77 |
+  | rollout h=6 | 1.155 | 1.507 | 0.77 |
+
+  Causal attention removed the 'copy next frame' shortcut seen in gt_v0
+  (teacher ratio 1.01 -> 0.81); rollout beats the no-dynamics baseline by
+  ~20-25% at all horizons.
+
+## Guide item 9 - counterfactual action-conditioning (script
+`scripts/eval_counterfactual.py`, decoder `scripts/make_gifs.py`)
+
+Same context rolled out under REC/STOP/LEFT(+yaw)/RIGHT(-yaw)/FWD(+vx):
+
+| model | mode | err vs GT @h8 | divergence from REC @h8 |
+|---|---|---|---|
+| gt_v0 | REC | 2.748 | - |
+| gt_v0 | LEFT | 2.820 | 0.139 |
+| gt_v1 | REC | **1.265** | - |
+| gt_v1 | STOP | 1.322 | 0.072 |
+| gt_v1 | FWD | 1.329 | 0.090 |
+| gt_v1 | LEFT | 1.387 | 0.324 |
+| gt_v1 | RIGHT | **1.624** | **0.667** |
+
+Conclusions: (a) recorded actions reproduce the true future best at every
+horizon; (b) commands steer rollouts (gt_v1 is ~5x more action-sensitive
+than gt_v0); (c) first future frame is command-invariant by design (an
+action row only shapes the transition it precedes). 20-frame (4 s) GIFs per
+mode and contact sheets can be regenerated with the scripts above.
+
+## Checkpoints
+
+Trained checkpoints are published on Hugging Face (not committed here due to
+size):
+- World model (predictor): `jepa-latest.pth.tar` under run folders
+  `gt_v0_...` / `gt_v1_...`
+- Decoder heads: `jepa-latest_image_head.pth.tar` under `gt_v0_step2_vm2m` /
+  `gt_v1_step2_vm2m`
+- Repo: https://huggingface.co/rayaanoidPrime/vjepa-wm-grandtour
+
+Licensing note: model weights derive from DINOv2 (Apache-2.0), jepa-wms
+(CC-BY-NC) and GrandTour data (CC BY-SA 4.0).

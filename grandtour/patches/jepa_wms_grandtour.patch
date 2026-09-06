@@ -1037,6 +1037,864 @@ index 0000000..b39445d
 +  save_decoding_only: true
 +  repeat_hardcode_act: 1
 +  obs: rgb
+diff --git a/configs/vjepa_wm/grandtour_sweep/gt_v1_12f_fps5_r224_dv2vitl_AdaLN_d12c_2roll_1n.yaml b/configs/vjepa_wm/grandtour_sweep/gt_v1_12f_fps5_r224_dv2vitl_AdaLN_d12c_2roll_1n.yaml
+new file mode 100644
+index 0000000..1b4e4ba
+--- /dev/null
++++ b/configs/vjepa_wm/grandtour_sweep/gt_v1_12f_fps5_r224_dv2vitl_AdaLN_d12c_2roll_1n.yaml
+@@ -0,0 +1,199 @@
++app: vjepa_wm
++nodes: 1
++tasks_per_node: 1
++cpus_per_task: 8
++folder: ${JEPAWM_LOGS}/grandtour_sweep/gt_v1_12f_fps5_r224_dv2vitl_AdaLN_d12c_2roll_1n
++data:
++  dataset_type: custom
++  datasets:
++    - GrandTour
++  datasets_weights: null
++  seed: 111
++  img_size: 224
++  validation:
++    val_datasets:
++      - GrandTour
++    num_frames_val: 5
++    val_dataset_batch_size: 4
++    val_dataset_drop_last: false
++    val_dataset_fpcs: [12]
++    val_dataset_camera_views: ["hdr_front"]
++    val_viz_rank0_loader: true
++  loader:
++    batch_size: 2
++    num_workers: 6
++    pin_mem: true
++    persistent_workers: true
++  custom:
++    split_ratio: null
++    frameskip: 1
++    action_skip: 1
++    state_skip: 1
++    normalize_action: false
++    traj_subset: true
++    filter_first_episodes: null
++    filter_tasks: null
++    num_hist: null
++    num_pred: null
++    with_reward: null
++    custom_teleop_dset: null
++  droid:
++    camera_frame: null
++    camera_views:
++      - hdr_front
++    droid_to_rcasa_action_format: 1
++    rcasa_to_droid_action_format: null
++    fps: 5
++    dataset_fpcs: [12]
++    mpk_manifest_patterns:
++      - '**/episode.h5'
++data_aug:
++  auto_augment: false
++  random_horizontal_flip: false
++  motion_shift: false
++  random_resize_aspect_ratio:
++  - 1.
++  - 1.
++  random_resize_scale:
++  - 0.6
++  - 1.0
++  reprob: 0.0
++  normalize: [[0.485, 0.456, 0.406], [0.229, 0.224, 0.225]]
++logging:
++  write_tag: jepa
++  wandb:
++    use_wandb: false
++    debug: false
++    project: vjepa_wm
++    disable_wandb_media: true
++    log_media_locally: true
++loss:
++  cos_loss_weight: 0.0
++  l1_loss_weight: 0.0
++  l2_loss_weight: 1.0
++  smooth_l1_loss_weight: 0.0
++meta:
++  plan_only_eval_mode: false
++  light_eval_only_mode: false
++  unroll_decode_eval_only_mode: false
++  quick_debug: false
++  freeze_encoder: true
++  load_checkpoint: false
++  load_opt_scale_epoch: true
++  read_checkpoint: null
++  seed: 234
++  eval_freq: 50
++  light_eval_freq: 200
++  save_every_freq: 1
++  dtype: bfloat16
++  data_traj_rollout_eval:
++    do_data_traj_rollout_eval: false
++    data_traj_eval_rollout_steps: 6
++    data_traj_decode_gt: false
++    data_traj_eval_ctxt_window: 3
++  energy_landscape_eval:
++    do_energy_landscape_eval: false
++    energy_landscape_rollout_steps: 1
++    energy_landscape_ctxt_window: 3
++model:
++  grid_size: 16
++  tubelet_size_enc: 1
++  use_activation_checkpointing: false
++  action_conditioning: token
++  proprio_encoding: none
++  num_frames_pred: 12
++  visual_encoder:
++    enc_type: dino
++    enc_version: dinov2_vitl14
++    pretrain_enc_path: null
++    pretrain_enc_ckpt_key: null
++    embed_dim: 1024
++    enc_use_rope: null
++    enc_name: null
++    use_sdpa_enc: null
++    num_frames_enc: null
++    uniform_power: true
++  action_encoder:
++    action_tokens: 1
++    action_emb_dim: 0
++    act_mlp: false
++    action_encoder_inpred: true
++  proprio_encoder:
++    proprio_tokens: 0
++    proprio_emb_dim: 0
++    prop_mlp: false
++    proprio_encoder_inpred: false
++  predictor:
++    tubelet_size: 1
++    pred_num_heads: 16
++    pred_depth: 12
++    pred_embed_dim: 1024
++    pred_use_extrinsics: false
++    pred_type: AdaLN
++    act_pred_projector: null
++    use_SiLU: null
++    use_rope: true
++  wm_encoding:
++    batchify_video: true
++    dup_image: false
++    normalize_reps: false
++  rollout_cfg:
++    rollout_steps: 2
++    train_rollout_prefixes: random
++    rollout_stop_gradient: true
++    ctxt_window_train_rollout: 3
++    do_parallel_rollout: null
++    do_sequential_rollout: true
++    prepend_gt: null
++    sampling_scheduler:
++      type: linear
++      start: 0.
++      end: 0.
++  attn:
++    local_window_time: 3
++    local_window_h: -1
++    local_window_w: -1
++  heads_cfg:
++    architectures: {}
++    pretrain_dec_path:
++optimization:
++  main_optimizer: transition_model
++  train_heads: false
++  transition_model:
++    iterations_per_epoch: 160
++    ipe_scale: 1.
++    clip_grad: 1
++    use_radamw: false
++    betas: [0.9, 0.995]
++    eps: 1.e-8
++    weight_decay: 1.e-7
++    final_weight_decay: 1.e-6
++    num_epochs: 10
++    warmup: 0
++    start_lr: 5.e-4
++    ref_lr: 5.e-4
++    final_lr: 5.e-4
++    mixed_precision: true
++evals:
++  separate: false
++  decode: false
++  eval_episodes: 16
++  nodes: 1
++  low_pri: true
++  obs: rgb
++  alpha: 0
++  override_cfgs_data: true
++  override_datasets: true
++  wrapper_kwargs:
++    ctxt_window: 2
++  dump_eval_configs: false
++  eval_cfg_paths: []
++unroll_decode_evals:
++  wrapper_kwargs:
++    ctxt_window: 2
++  specific_video: false
++  specific_video_path:
++  play_in_reverse: false
++  save_decoding_only: true
++  repeat_hardcode_act: 1
++  obs: rgb
+diff --git a/configs/vjepa_wm/grandtour_sweep/gt_v1_12f_fps5_r224_dv2vitl_AdaLN_d12c_2roll_1n_SMOKE.yaml b/configs/vjepa_wm/grandtour_sweep/gt_v1_12f_fps5_r224_dv2vitl_AdaLN_d12c_2roll_1n_SMOKE.yaml
+new file mode 100644
+index 0000000..b6cf288
+--- /dev/null
++++ b/configs/vjepa_wm/grandtour_sweep/gt_v1_12f_fps5_r224_dv2vitl_AdaLN_d12c_2roll_1n_SMOKE.yaml
+@@ -0,0 +1,199 @@
++app: vjepa_wm
++nodes: 1
++tasks_per_node: 1
++cpus_per_task: 8
++folder: ${JEPAWM_LOGS}/grandtour_sweep/gt_v1_12f_fps5_r224_dv2vitl_AdaLN_d12c_2roll_1n_SMOKE
++data:
++  dataset_type: custom
++  datasets:
++    - GrandTour
++  datasets_weights: null
++  seed: 111
++  img_size: 224
++  validation:
++    val_datasets:
++      - GrandTour
++    num_frames_val: 5
++    val_dataset_batch_size: 4
++    val_dataset_drop_last: false
++    val_dataset_fpcs: [12]
++    val_dataset_camera_views: ["hdr_front"]
++    val_viz_rank0_loader: true
++  loader:
++    batch_size: 2
++    num_workers: 0
++    pin_mem: true
++    persistent_workers: true
++  custom:
++    split_ratio: null
++    frameskip: 1
++    action_skip: 1
++    state_skip: 1
++    normalize_action: false
++    traj_subset: true
++    filter_first_episodes: null
++    filter_tasks: null
++    num_hist: null
++    num_pred: null
++    with_reward: null
++    custom_teleop_dset: null
++  droid:
++    camera_frame: null
++    camera_views:
++      - hdr_front
++    droid_to_rcasa_action_format: 1
++    rcasa_to_droid_action_format: null
++    fps: 5
++    dataset_fpcs: [12]
++    mpk_manifest_patterns:
++      - '**/episode.h5'
++data_aug:
++  auto_augment: false
++  random_horizontal_flip: false
++  motion_shift: false
++  random_resize_aspect_ratio:
++  - 1.
++  - 1.
++  random_resize_scale:
++  - 0.6
++  - 1.0
++  reprob: 0.0
++  normalize: [[0.485, 0.456, 0.406], [0.229, 0.224, 0.225]]
++logging:
++  write_tag: jepa
++  wandb:
++    use_wandb: false
++    debug: false
++    project: vjepa_wm
++    disable_wandb_media: true
++    log_media_locally: true
++loss:
++  cos_loss_weight: 0.0
++  l1_loss_weight: 0.0
++  l2_loss_weight: 1.0
++  smooth_l1_loss_weight: 0.0
++meta:
++  plan_only_eval_mode: false
++  light_eval_only_mode: false
++  unroll_decode_eval_only_mode: false
++  quick_debug: true
++  freeze_encoder: true
++  load_checkpoint: false
++  load_opt_scale_epoch: true
++  read_checkpoint: null
++  seed: 234
++  eval_freq: 50
++  light_eval_freq: 200
++  save_every_freq: 1
++  dtype: bfloat16
++  data_traj_rollout_eval:
++    do_data_traj_rollout_eval: false
++    data_traj_eval_rollout_steps: 6
++    data_traj_decode_gt: false
++    data_traj_eval_ctxt_window: 3
++  energy_landscape_eval:
++    do_energy_landscape_eval: false
++    energy_landscape_rollout_steps: 1
++    energy_landscape_ctxt_window: 3
++model:
++  grid_size: 16
++  tubelet_size_enc: 1
++  use_activation_checkpointing: false
++  action_conditioning: token
++  proprio_encoding: none
++  num_frames_pred: 12
++  visual_encoder:
++    enc_type: dino
++    enc_version: dinov2_vitl14
++    pretrain_enc_path: null
++    pretrain_enc_ckpt_key: null
++    embed_dim: 1024
++    enc_use_rope: null
++    enc_name: null
++    use_sdpa_enc: null
++    num_frames_enc: null
++    uniform_power: true
++  action_encoder:
++    action_tokens: 1
++    action_emb_dim: 0
++    act_mlp: false
++    action_encoder_inpred: true
++  proprio_encoder:
++    proprio_tokens: 0
++    proprio_emb_dim: 0
++    prop_mlp: false
++    proprio_encoder_inpred: false
++  predictor:
++    tubelet_size: 1
++    pred_num_heads: 16
++    pred_depth: 12
++    pred_embed_dim: 1024
++    pred_use_extrinsics: false
++    pred_type: AdaLN
++    act_pred_projector: null
++    use_SiLU: null
++    use_rope: true
++  wm_encoding:
++    batchify_video: true
++    dup_image: false
++    normalize_reps: false
++  rollout_cfg:
++    rollout_steps: 2
++    train_rollout_prefixes: random
++    rollout_stop_gradient: true
++    ctxt_window_train_rollout: 3
++    do_parallel_rollout: null
++    do_sequential_rollout: true
++    prepend_gt: null
++    sampling_scheduler:
++      type: linear
++      start: 0.
++      end: 0.
++  attn:
++    local_window_time: 3
++    local_window_h: -1
++    local_window_w: -1
++  heads_cfg:
++    architectures: {}
++    pretrain_dec_path:
++optimization:
++  main_optimizer: transition_model
++  train_heads: false
++  transition_model:
++    iterations_per_epoch: 3
++    ipe_scale: 1.
++    clip_grad: 1
++    use_radamw: false
++    betas: [0.9, 0.995]
++    eps: 1.e-8
++    weight_decay: 1.e-7
++    final_weight_decay: 1.e-6
++    num_epochs: 1
++    warmup: 0
++    start_lr: 5.e-4
++    ref_lr: 5.e-4
++    final_lr: 5.e-4
++    mixed_precision: true
++evals:
++  separate: false
++  decode: false
++  eval_episodes: 16
++  nodes: 1
++  low_pri: true
++  obs: rgb
++  alpha: 0
++  override_cfgs_data: true
++  override_datasets: true
++  wrapper_kwargs:
++    ctxt_window: 2
++  dump_eval_configs: false
++  eval_cfg_paths: []
++unroll_decode_evals:
++  wrapper_kwargs:
++    ctxt_window: 2
++  specific_video: false
++  specific_video_path:
++  play_in_reverse: false
++  save_decoding_only: true
++  repeat_hardcode_act: 1
++  obs: rgb
+diff --git a/configs/vjepa_wm/grandtour_sweep/gt_v1_resume20.yaml b/configs/vjepa_wm/grandtour_sweep/gt_v1_resume20.yaml
+new file mode 100644
+index 0000000..768afa0
+--- /dev/null
++++ b/configs/vjepa_wm/grandtour_sweep/gt_v1_resume20.yaml
+@@ -0,0 +1,199 @@
++app: vjepa_wm
++nodes: 1
++tasks_per_node: 1
++cpus_per_task: 8
++folder: ${JEPAWM_LOGS}/grandtour_sweep/gt_v1_12f_fps5_r224_dv2vitl_AdaLN_d12c_2roll_1n
++data:
++  dataset_type: custom
++  datasets:
++    - GrandTour
++  datasets_weights: null
++  seed: 111
++  img_size: 224
++  validation:
++    val_datasets:
++      - GrandTour
++    num_frames_val: 5
++    val_dataset_batch_size: 4
++    val_dataset_drop_last: false
++    val_dataset_fpcs: [12]
++    val_dataset_camera_views: ["hdr_front"]
++    val_viz_rank0_loader: true
++  loader:
++    batch_size: 2
++    num_workers: 6
++    pin_mem: true
++    persistent_workers: true
++  custom:
++    split_ratio: null
++    frameskip: 1
++    action_skip: 1
++    state_skip: 1
++    normalize_action: false
++    traj_subset: true
++    filter_first_episodes: null
++    filter_tasks: null
++    num_hist: null
++    num_pred: null
++    with_reward: null
++    custom_teleop_dset: null
++  droid:
++    camera_frame: null
++    camera_views:
++      - hdr_front
++    droid_to_rcasa_action_format: 1
++    rcasa_to_droid_action_format: null
++    fps: 5
++    dataset_fpcs: [12]
++    mpk_manifest_patterns:
++      - '**/episode.h5'
++data_aug:
++  auto_augment: false
++  random_horizontal_flip: false
++  motion_shift: false
++  random_resize_aspect_ratio:
++  - 1.
++  - 1.
++  random_resize_scale:
++  - 0.6
++  - 1.0
++  reprob: 0.0
++  normalize: [[0.485, 0.456, 0.406], [0.229, 0.224, 0.225]]
++logging:
++  write_tag: jepa
++  wandb:
++    use_wandb: false
++    debug: false
++    project: vjepa_wm
++    disable_wandb_media: true
++    log_media_locally: true
++loss:
++  cos_loss_weight: 0.0
++  l1_loss_weight: 0.0
++  l2_loss_weight: 1.0
++  smooth_l1_loss_weight: 0.0
++meta:
++  plan_only_eval_mode: false
++  light_eval_only_mode: false
++  unroll_decode_eval_only_mode: false
++  quick_debug: false
++  freeze_encoder: true
++  load_checkpoint: true
++  load_opt_scale_epoch: true
++  read_checkpoint: null
++  seed: 234
++  eval_freq: 50
++  light_eval_freq: 200
++  save_every_freq: 1
++  dtype: bfloat16
++  data_traj_rollout_eval:
++    do_data_traj_rollout_eval: false
++    data_traj_eval_rollout_steps: 6
++    data_traj_decode_gt: false
++    data_traj_eval_ctxt_window: 3
++  energy_landscape_eval:
++    do_energy_landscape_eval: false
++    energy_landscape_rollout_steps: 1
++    energy_landscape_ctxt_window: 3
++model:
++  grid_size: 16
++  tubelet_size_enc: 1
++  use_activation_checkpointing: false
++  action_conditioning: token
++  proprio_encoding: none
++  num_frames_pred: 12
++  visual_encoder:
++    enc_type: dino
++    enc_version: dinov2_vitl14
++    pretrain_enc_path: null
++    pretrain_enc_ckpt_key: null
++    embed_dim: 1024
++    enc_use_rope: null
++    enc_name: null
++    use_sdpa_enc: null
++    num_frames_enc: null
++    uniform_power: true
++  action_encoder:
++    action_tokens: 1
++    action_emb_dim: 0
++    act_mlp: false
++    action_encoder_inpred: true
++  proprio_encoder:
++    proprio_tokens: 0
++    proprio_emb_dim: 0
++    prop_mlp: false
++    proprio_encoder_inpred: false
++  predictor:
++    tubelet_size: 1
++    pred_num_heads: 16
++    pred_depth: 12
++    pred_embed_dim: 1024
++    pred_use_extrinsics: false
++    pred_type: AdaLN
++    act_pred_projector: null
++    use_SiLU: null
++    use_rope: true
++  wm_encoding:
++    batchify_video: true
++    dup_image: false
++    normalize_reps: false
++  rollout_cfg:
++    rollout_steps: 2
++    train_rollout_prefixes: random
++    rollout_stop_gradient: true
++    ctxt_window_train_rollout: 3
++    do_parallel_rollout: null
++    do_sequential_rollout: true
++    prepend_gt: null
++    sampling_scheduler:
++      type: linear
++      start: 0.
++      end: 0.
++  attn:
++    local_window_time: 3
++    local_window_h: -1
++    local_window_w: -1
++  heads_cfg:
++    architectures: {}
++    pretrain_dec_path:
++optimization:
++  main_optimizer: transition_model
++  train_heads: false
++  transition_model:
++    iterations_per_epoch: 160
++    ipe_scale: 1.
++    clip_grad: 1
++    use_radamw: false
++    betas: [0.9, 0.995]
++    eps: 1.e-8
++    weight_decay: 1.e-7
++    final_weight_decay: 1.e-6
++    num_epochs: 20
++    warmup: 0
++    start_lr: 5.e-4
++    ref_lr: 5.e-4
++    final_lr: 5.e-4
++    mixed_precision: true
++evals:
++  separate: false
++  decode: false
++  eval_episodes: 16
++  nodes: 1
++  low_pri: true
++  obs: rgb
++  alpha: 0
++  override_cfgs_data: true
++  override_datasets: true
++  wrapper_kwargs:
++    ctxt_window: 2
++  dump_eval_configs: false
++  eval_cfg_paths: []
++unroll_decode_evals:
++  wrapper_kwargs:
++    ctxt_window: 2
++  specific_video: false
++  specific_video_path:
++  play_in_reverse: false
++  save_decoding_only: true
++  repeat_hardcode_act: 1
++  obs: rgb
+diff --git a/configs/vjepa_wm/grandtour_sweep/gt_v1_step2_vm2m.yaml b/configs/vjepa_wm/grandtour_sweep/gt_v1_step2_vm2m.yaml
+new file mode 100644
+index 0000000..5f1eba1
+--- /dev/null
++++ b/configs/vjepa_wm/grandtour_sweep/gt_v1_step2_vm2m.yaml
+@@ -0,0 +1,237 @@
++app: vjepa_wm
++nodes: 1
++tasks_per_node: 1
++cpus_per_task: 8
++folder: ${JEPAWM_LOGS}/grandtour_sweep/gt_v1_step2_vm2m
++data:
++  dataset_type: custom
++  datasets:
++    - GrandTour
++  datasets_weights: null
++  seed: 111
++  img_size: 224
++  validation:
++    val_datasets:
++      - GrandTour
++    num_frames_val: 5
++    val_dataset_batch_size: 4
++    val_dataset_drop_last: false
++    val_dataset_fpcs: [12]
++    val_dataset_camera_views: ["hdr_front"]
++    val_viz_rank0_loader: true
++  loader:
++    batch_size: 2
++    num_workers: 6
++    pin_mem: true
++    persistent_workers: true
++  custom:
++    split_ratio: null
++    frameskip: 1
++    action_skip: 1
++    state_skip: 1
++    normalize_action: false
++    traj_subset: true
++    filter_first_episodes: null
++    filter_tasks: null
++    num_hist: null
++    num_pred: null
++    with_reward: null
++    custom_teleop_dset: null
++  droid:
++    camera_frame: null
++    camera_views:
++      - hdr_front
++    droid_to_rcasa_action_format: 1
++    rcasa_to_droid_action_format: null
++    fps: 5
++    dataset_fpcs: [12]
++    mpk_manifest_patterns:
++      - '**/episode.h5'
++data_aug:
++  auto_augment: false
++  random_horizontal_flip: false
++  motion_shift: false
++  random_resize_aspect_ratio:
++  - 1.
++  - 1.
++  random_resize_scale:
++  - 0.6
++  - 1.0
++  reprob: 0.0
++  normalize: [[0.485, 0.456, 0.406], [0.229, 0.224, 0.225]]
++logging:
++  write_tag: jepa
++  wandb:
++    use_wandb: false
++    debug: false
++    project: vjepa_wm
++    disable_wandb_media: true
++    log_media_locally: true
++loss:
++  cos_loss_weight: 0.0
++  l1_loss_weight: 0.0
++  l2_loss_weight: 1.0
++  smooth_l1_loss_weight: 0.0
++meta:
++  plan_only_eval_mode: false
++  light_eval_only_mode: false
++  unroll_decode_eval_only_mode: false
++  quick_debug: false
++  freeze_encoder: true
++  load_checkpoint: false
++  load_opt_scale_epoch: true
++  read_checkpoint: null
++  seed: 234
++  eval_freq: 50
++  light_eval_freq: 200
++  save_every_freq: 1
++  dtype: bfloat16
++  data_traj_rollout_eval:
++    do_data_traj_rollout_eval: false
++    data_traj_eval_rollout_steps: 6
++    data_traj_decode_gt: false
++    data_traj_eval_ctxt_window: 3
++  energy_landscape_eval:
++    do_energy_landscape_eval: false
++    energy_landscape_rollout_steps: 1
++    energy_landscape_ctxt_window: 3
++model:
++  grid_size: 16
++  tubelet_size_enc: 1
++  use_activation_checkpointing: false
++  action_conditioning: token
++  proprio_encoding: none
++  num_frames_pred: 12
++  visual_encoder:
++    enc_type: dino
++    enc_version: dinov2_vitl14
++    pretrain_enc_path: null
++    pretrain_enc_ckpt_key: null
++    embed_dim: 1024
++    enc_use_rope: null
++    enc_name: null
++    use_sdpa_enc: null
++    num_frames_enc: null
++    uniform_power: true
++  action_encoder:
++    action_tokens: 1
++    action_emb_dim: 0
++    act_mlp: false
++    action_encoder_inpred: true
++  proprio_encoder:
++    proprio_tokens: 0
++    proprio_emb_dim: 0
++    prop_mlp: false
++    proprio_encoder_inpred: false
++  predictor:
++    tubelet_size: 1
++    pred_num_heads: 16
++    pred_depth: 12
++    pred_embed_dim: 1024
++    pred_use_extrinsics: false
++    pred_type: AdaLN
++    act_pred_projector: null
++    use_SiLU: null
++    use_rope: true
++  wm_encoding:
++    batchify_video: true
++    dup_image: false
++    normalize_reps: false
++  rollout_cfg:
++    rollout_steps: 2
++    train_rollout_prefixes: random
++    rollout_stop_gradient: true
++    ctxt_window_train_rollout: 3
++    do_parallel_rollout: null
++    do_sequential_rollout: true
++    prepend_gt: null
++    sampling_scheduler:
++      type: linear
++      start: 0.
++      end: 0.
++  attn:
++    local_window_time: 3
++    local_window_h: -1
++    local_window_w: -1
++
++  heads_cfg:
++    architectures:
++      image_head:
++        kind: vit
++        config:
++          patch_size: 8
++          in_chans: 3
++          img_size: [224, 224]
++          embed_dim: 1024
++          decoder_embed_dim: 1024
++          depth: 8
++          num_heads: 16
++          mlp_ratio: 4.0
++          num_views: 1
++          use_activation_checkpointing: false
++          use_lpips: true
++          pixelloss_weight: 10
++          perceptual_weight: 1
++    pretrain_dec_path: null
++
++optimization:
++  main_optimizer: image_head
++  train_heads: true
++  transition_model:
++    iterations_per_epoch: 250
++    ipe_scale: 1.
++    clip_grad: 1
++    use_radamw: false
++    betas: [0.9, 0.995]
++    eps: 1.e-8
++    weight_decay: 1.e-7
++    final_weight_decay: 1.e-6
++    num_epochs: 3
++    warmup: 0
++    start_lr: 5.e-4
++    ref_lr: 5.e-4
++    final_lr: 5.e-4
++    mixed_precision: true
++  heads:
++    train_predictor: false
++    train_heads_on_predictor: false
++    image_head:
++      use_radamw: false
++      betas: [0.9, 0.999]
++      eps: 1e-8
++      ipe_scale: 1.0
++      weight_decay: 0.05
++      final_weight_decay: 0.05
++      final_lr: 1.0e-5
++      start_lr: 0.0
++      ref_lr: 5.0e-4
++      warmup: 0
++      num_epochs: 3
++      iterations_per_epoch: 250
++      clip_grad: 1
++      mixed_precision: true
++
++
++evals:
++  separate: false
++  decode: false
++  eval_episodes: 16
++  nodes: 1
++  low_pri: true
++  obs: rgb
++  alpha: 0
++  override_cfgs_data: true
++  override_datasets: true
++  wrapper_kwargs:
++    ctxt_window: 2
++  dump_eval_configs: false
++  eval_cfg_paths: []
++unroll_decode_evals:
++  wrapper_kwargs:
++    ctxt_window: 2
++  specific_video: false
++  specific_video_path:
++  play_in_reverse: false
++  save_decoding_only: true
++  repeat_hardcode_act: 1
++  obs: rgb
 diff --git a/src/datasets/video_dataset.py b/src/datasets/video_dataset.py
 index 4d2ef55..75e4a40 100644
 --- a/src/datasets/video_dataset.py
