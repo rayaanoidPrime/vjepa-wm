@@ -113,7 +113,7 @@ def build():
                  frameskip=1, img_size=d["img_size"], heads={}, scaler=None, optimizer=None,
                  clip_grad=1.0, mixed_precision=False, use_radamw=False,
                  cfgs_loss=cfg["loss"], dup_image=False, batchify_video=True,
-                 normalize_reps=False).to(DEVICE)
+                 normalize_reps=bool((m.get("wm_encoding") or {}).get("normalize_reps", False))).to(DEVICE)
     for p in wm.parameters():
         p.requires_grad_(False)
     ck = torch.load(LOGS / TAG / "jepa-latest.pth.tar", map_location="cpu")
