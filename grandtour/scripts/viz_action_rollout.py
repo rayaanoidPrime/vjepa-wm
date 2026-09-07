@@ -67,6 +67,7 @@ from app.vjepa_wm.utils import init_video_model
 from app.vjepa_wm.video_wm import VideoWM
 
 DEVICE = "cuda:0"
+DEC_IMG = 224  # decoded image side; set from the decoder config at build()
 LOGS = _paths.JEPAWM_LOGS / "grandtour_sweep"
 DEC_YAML_DEF = _paths.JEPAWM_HOME / "configs/vjepa_wm/vm2m/open_source_decs/step2_lpips_vm2m_vits_vitldec_224_vjtrans.yaml"
 TAG = os.environ.get("GT_WM_TAG", "gt_v0_12f_fps5_r224_dv2vits_AdaLN_d6_2roll_1n")
@@ -119,6 +120,8 @@ def build():
     wm.predictor.load_state_dict({k.replace("module.", ""): v for k, v in ck["predictor"].items()})
     dec = yaml.safe_load(open(os.environ.get("GT_DEC_YAML", str(DEC_YAML_DEF))))
     hcfg = dec["model"]["heads_cfg"]["architectures"]["image_head"]["config"]
+    imgsz = hcfg.get("img_size", 224)
+    globals()["DEC_IMG"] = int(imgsz[0] if isinstance(imgsz, (list, tuple)) else imgsz)
     head = WorldModelViTImageHead(head_config=hcfg, inverse_transform=inv, device=DEVICE)
     head.load_checkpoint(os.environ["GT_DEC_CKPT"])
     head.model.to(DEVICE).eval()
@@ -186,11 +189,11 @@ def u8(t):
 
 def panel(imL, imR, header):
     s = 2
-    w = 224 * s * 2 + 4
-    c = Image.new("RGB", (w, 224 * s + 28), (16, 16, 16))
+    w = DEC_IMG * s * 2 + 4
+    c = Image.new("RGB", (w, DEC_IMG * s + 28), (16, 16, 16))
     ImageDraw.Draw(c).text((8, 7), header, fill=(235, 235, 235))
-    c.paste(Image.fromarray(imL).resize((224 * s, 224 * s), Image.NEAREST), (0, 28))
-    c.paste(Image.fromarray(imR).resize((224 * s, 224 * s), Image.NEAREST), (224 * s + 4, 28))
+    c.paste(Image.fromarray(imL).resize((DEC_IMG * s, DEC_IMG * s), Image.NEAREST), (0, 28))
+    c.paste(Image.fromarray(imR).resize((DEC_IMG * s, DEC_IMG * s), Image.NEAREST), (DEC_IMG * s + 4, 28))
     return np.asarray(c)
 
 
