@@ -175,7 +175,10 @@ def load_window(ds, tr, inv, ep, fstp, s0, length):
 
 
 def u8(t):
+    """Tensor/np to uint8 RGB with channels last (accepts C,H,W or H,W,C)."""
     t = t.detach().cpu().float()
+    if t.dim() == 3 and t.shape[2] != 3 and t.shape[0] in (1, 3):
+        t = t.permute(1, 2, 0)
     t = (t * 255.0 if t.max() <= 1.0 else t).clamp(0, 255)
     return t.byte().numpy()
 
