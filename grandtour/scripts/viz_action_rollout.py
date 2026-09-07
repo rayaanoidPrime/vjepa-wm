@@ -67,6 +67,7 @@ from app.vjepa_wm.utils import init_video_model
 from app.vjepa_wm.video_wm import VideoWM
 
 DEVICE = "cuda:0"
+NORM_ON = False  # set from wm_encoding.normalize_reps at build()
 DEC_IMG = 224  # decoded image side; set from the decoder config at build()
 LOGS = _paths.JEPAWM_LOGS / "grandtour_sweep"
 DEC_YAML_DEF = _paths.JEPAWM_HOME / "configs/vjepa_wm/vm2m/open_source_decs/step2_lpips_vm2m_vits_vitldec_224_vjtrans.yaml"
@@ -122,6 +123,7 @@ def build():
     hcfg = dec["model"]["heads_cfg"]["architectures"]["image_head"]["config"]
     imgsz = hcfg.get("img_size", 224)
     globals()["DEC_IMG"] = int(imgsz[0] if isinstance(imgsz, (list, tuple)) else imgsz)
+    globals()["NORM_ON"] = bool((m.get("wm_encoding") or {}).get("normalize_reps", False))
     head = WorldModelViTImageHead(head_config=hcfg, inverse_transform=inv, device=DEVICE)
     head.load_checkpoint(os.environ["GT_DEC_CKPT"])
     head.model.to(DEVICE).eval()
@@ -187,6 +189,12 @@ def u8(t):
     return t.byte().numpy()
 
 
+def norm_latent(x):
+    """LayerNorm each token (last dim) to match encoder x_norm token statistics."""
+    D = x.shape[-1]
+    return torch.nn.functional.layer_norm(x.float(), (D,)).to(x.dtype)
+
+
 def panel(imL, imR, header):
     s = 2
     w = DEC_IMG * s * 2 + 4
@@ -228,8 +236,9 @@ def rollout(ds, tr, inv, wm, head):
             aw = A.unsqueeze(0).to(DEVICE)[:, p - WB:p]
             out, _, _ = wm.predictor(cw, aw, None)
             nxt = out[:, -1].view(1, 1, H, W, D).unsqueeze(2)
+            decf = norm_latent(nxt) if NORM_ON else nxt
             win = torch.cat([win, nxt], 1)
-            dec = u8(head.decode(nxt.float())[0, 0, 0])
+            dec = u8(head.decode(decf.float())[0, 0, 0])
             sim = torch.nn.functional.cosine_similarity(
                 nxt.reshape(1, H * W, D).float(), vf[:, p].reshape(1, H * W, D).float(), dim=-1).mean().item()
             sims.append(sim)
@@ -268,8 +277,9 @@ def rollout_plan(ds, tr, inv, wm, head):
             aw = A.unsqueeze(0).to(DEVICE)[:, p - WB:p]
             out, _, _ = wm.predictor(cw, aw, None)
             nxt = out[:, -1].view(1, 1, H, W, D).unsqueeze(2)
+            decf = norm_latent(nxt) if NORM_ON else nxt
             win = torch.cat([win, nxt], 1)
-            frames.append(panel(u8(head.decode(nxt.float())[0, 0, 0]), gt[p],
+            frames.append(panel(u8(head.decode(decf.float())[0, 0, 0]), gt[p],
                                 f"pred t=+{p} | GT actual (cmd {seq[k]})"))
             p += 1
     save(frames, name + "_plan")
