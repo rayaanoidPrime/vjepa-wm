@@ -53,7 +53,21 @@ python "$JEPAWM_HOME/../.venv/bin/python" -m app.main \
     --fname configs/vjepa_wm/grandtour_sweep/gt_v0_SMOKE.yaml --debug
 ```
 
+### 5) visualize: GT-action-conditioned future rollouts (final demo)
+
+```bash
+# world-model config + predictor checkpoint under $JEPAWM_LOGS/grandtour_sweep/<GT_WM_TAG>/
+#   (ours: fetch the gt_v0_... folder from https://huggingface.co/rayaanoidpr/vjepa-wm-grandtour)
+export GT_WM_TAG=gt_v0_12f_fps5_r224_dv2vits_AdaLN_d6_2roll_1n
+# decoder = the vm2m decoder facebookresearch/jepa-wms publishes for DINOv2 ViT-S/14
+#   (3.6 GB): https://dl.fbaipublicfiles.com/jepa-wms/vm2m_lpips_dv2vits_vitldec_224_INet.pth.tar
+export GT_DEC_CKPT=/path/to/vm2m_lpips_dv2vits_vitldec_224_INet.pth.tar
+python grandtour/scripts/viz_action_rollout.py                       # gt mode: 4 ctx + 10 future (pred | GT)
+GT_MODE=plan GT_PLAN="FWD 10, LEFT 5, FWD 5" python grandtour/scripts/viz_action_rollout.py
+```
+
 ## The two-phase experiment (what this branch validates)
+
 
 1. **World model** (frozen DINOv2 `vits14` encoder + AdaLN depth-6 predictor,
    12-frame windows @ 5 fps, 2-step rollout training, actions = commanded
