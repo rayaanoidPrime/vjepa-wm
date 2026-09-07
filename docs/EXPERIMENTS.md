@@ -52,8 +52,8 @@ generalization to unseen weather/terrain was not tested in this run.
 - Checkpoints (auto-saved by jepa-wms):
   `$JEPAWM_LOGS/grandtour_sweep/<run>/jepa-latest.pth.tar`
   and `..._image_head.pth.tar` (separate file per head).
-- `python grandtour/scripts/viz_future_frames.py` renders contact sheets
-  (GT-recon row + context/rolled-out-prediction row) to `$GT_VIZ`.
+- `python grandtour/scripts/viz_action_rollout.py` renders the final
+  action-conditioned rollout GIF/MP4 (see the demo section at the bottom).
 
 ## Reproducibility caveats
 
@@ -91,7 +91,7 @@ generalization to unseen weather/terrain was not tested in this run.
   ~20-25% at all horizons.
 
 ## Guide item 9 - counterfactual action-conditioning (script
-`scripts/eval_counterfactual.py`, decoder `scripts/make_gifs.py`)
+`scripts/eval_counterfactual.py`, visuals via `scripts/viz_action_rollout.py` `GT_MODE=plan`)
 
 Same context rolled out under REC/STOP/LEFT(+yaw)/RIGHT(-yaw)/FWD(+vx):
 
@@ -111,6 +111,42 @@ than gt_v0); (c) first future frame is command-invariant by design (an
 action row only shapes the transition it precedes). 20-frame (4 s) GIFs per
 mode and contact sheets can be regenerated with the scripts above.
 
+## Final action-conditioned rollout demo
+
+The published visual: our trained world model (frozen DINOv2 encoder +
+predictor) rolled out and decoded with the autoencoder decoder that
+facebookresearch/jepa-wms publishes for the same DINOv2 ViT-S/14 encoder
+(`vm2m_lpips_dv2vits_vitldec_224_INet.pth.tar`, 3.6 GB,
+`https://dl.fbaipublicfiles.com/jepa-wms/...`). Layout per frame: LEFT =
+model output (context frames show the decoder's recon of the GT frame),
+RIGHT = actual GT frame. 4 GT context frames, then 10 future frames @ 5 fps
+generated with the video's OWN recorded actions (twist cmd + joints), i.e.
+"given what the robot actually commanded, what does the model see?".
+
+Script: `grandtour/scripts/viz_action_rollout.py` (env-driven, see docstring)
+
+```bash
+export GT_WM_TAG=gt_v0_12f_fps5_r224_dv2vits_AdaLN_d6_2roll_1n   # config+ckpt under $JEPAWM_LOGS/grandtour_sweep
+export GT_DEC_CKPT=/path/to/vm2m_lpips_dv2vits_vitldec_224_INet.pth.tar
+python grandtour/scripts/viz_action_rollout.py                         # gt mode: auto forward clip
+GT_MODE=plan GT_PLAN="FWD 10, LEFT 5, FWD 5" python grandtour/scripts/viz_action_rollout.py
+```
+
+Latent cosine similarity of the rollout vs the GT future features (h1..h10):
+
+| clip | motion | h1..h10 | mean |
+|---|---|---|---|
+| `2024-11-02-17-10-25` @ 680 | forward vx~1.0 | .839 .794 .773 .747 .717 .705 .698 .660 .646 .625 | 0.720 |
+| `2024-10-01-11-29-55` @ 1812 | turning vx .23 / yaw .73 | .782 .743 .729 .692 .675 .636 .612 .610 .608 .599 | 0.669 |
+| `2024-10-01-11-29-55` @ 1126 | fast fwd vx~1.0 | .818 .774 .763 .738 .747 .745 .723 .736 .744 .727 | 0.751 |
+
+Notes on the action interface (already validated above): the 39-d per-frame
+action = commanded twist [vx, vy, yaw_rate] + normalized 36 joint states;
+a linear action encoder emits one conditioning token per frame used as AdaLN
+modulation in the predictor; slot t predicts frame t+1, so the future frame
+at index p is driven by the recorded action row p-1 (row semantics above).
+
+
 ## Checkpoints
 
 Trained checkpoints are published on Hugging Face (not committed here due to
@@ -119,7 +155,7 @@ size):
   `gt_v0_...` / `gt_v1_...`
 - Decoder heads: `jepa-latest_image_head.pth.tar` under `gt_v0_step2_vm2m` /
   `gt_v1_step2_vm2m`
-- Repo: https://huggingface.co/rayaanoidPrime/vjepa-wm-grandtour
+- Repo: https://huggingface.co/rayaanoidpr/vjepa-wm-grandtour
 
 Licensing note: model weights derive from DINOv2 (Apache-2.0), jepa-wms
 (CC-BY-NC) and GrandTour data (CC BY-SA 4.0).

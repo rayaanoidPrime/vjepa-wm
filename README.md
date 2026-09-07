@@ -75,8 +75,7 @@ and visualization scripts under `grandtour/scripts/` reproduce them.
 | Training | `python -m app.main --fname <cfg> --debug` (see README there) |
 | Eval (copy baseline) | `grandtour/scripts/eval_copy_baseline.py` (set `GT_RUN` to eval a scaled run) |
 | Counterfactual action eval (guide item 9) | `grandtour/scripts/eval_counterfactual.py` |
-| 20-frame future GIFs | `grandtour/scripts/make_gifs.py` |
-| Future-frame sheets | `grandtour/scripts/viz_future_frames.py` (step-2 decoder head) |
+| Action-rollout GIF/MP4s (final) | `grandtour/scripts/viz_action_rollout.py` (GT-action-conditioned or scripted plans, decoded with the published vm2m decoder) |
 
 ## License notes
 
@@ -91,5 +90,5 @@ GrandTour data: CC BY-SA 4.0 (cite Frey, Tuna et al., arXiv:2602.18164).
 ## Checkpoints
 
 Trained world-model and decoder-head checkpoints (v0, v1 runs) are published
-on Hugging Face: https://huggingface.co/rayaanoidPrime/vjepa-wm-grandtour
+on Hugging Face: https://huggingface.co/rayaanoidpr/vjepa-wm-grandtour
 (results in `docs/EXPERIMENTS.md`).
