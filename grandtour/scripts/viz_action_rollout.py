@@ -45,6 +45,7 @@ Examples:
 import os
 import sys
 import warnings
+from pathlib import Path
 
 import _paths
 
