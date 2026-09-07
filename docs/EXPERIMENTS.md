@@ -147,6 +147,54 @@ modulation in the predictor; slot t predicts frame t+1, so the future frame
 at index p is driven by the recorded action row p-1 (row semantics above).
 
 
+## Path A - DINOv3 latent space (dv3-ViT-L/16 @256, their vm2m dv3vitl decoder)
+
+Second-generation world model in the latent space of the published
+facebookresearch/jepa-wms vm2m decoder (`vm2m_lpips_dv3vitl_256_INet.pth.tar`,
+3.6 GB, `dl.fbaipublicfiles.com/jepa-wms/...`), so the decoder is the *exact
+partner* of the encoder. DINOv3-ViT-L/16 backbone is gated upstream; we fetch
+the identical checkpoint from the public mirror
+`PIA-SPACE-LAB/dinov3-vitl-pretrain-lvd1689m` via
+`grandtour/scripts/fetch_dinov3.py`.
+
+Configs (in `grandtour/configs/`, copied into the checkout by `setup.sh`):
+
+| run | recipe | GT-action latent cos (fwd clip @680 / turn @1812, h1..h10 mean) |
+|---|---|---|
+| `gt_v2_..._4roll_1n` | dv3 @256, AdaLN d12 causal, **cosine-only** loss, 4-roll | 0.830 / 0.708 |
+| `gt_v3_..._8roll_1n` | v2 + **normalize_reps** (LayerNorm'd preds) + L2-0.1 + **8-roll** | 0.817 / 0.743 |
+
+16 epochs x 160 iters @ batch 2 runs ~22 min (v2) / ~27 min (v3) on an
+RTX PRO 6000; final train cos ~0.80.
+
+Key diagnostics (explains the "GT recon sharp, predicted decode blurry" effect):
+the cosine-only predictor drifts its output **~10x in magnitude** off the
+encoder-token manifold (cos is scale-blind); the decoder is not scale-invariant,
+so scaled tokens decode coarse. `gt_v3` fixes it: predicted/GT token-norm ratio
+1.000, L2 latent distance ~18 (vs ~80), and decoded edge detail is preserved.
+
+Decoder fine-tune (`grandtour/scripts/finetune_decoder.py`, step-2b style):
+warm-start the published dv3vitl decoder + 3 epochs on GT-encoder recon and
+frozen-predictor rollout latents (lr 5e-4, 0.47 s/it). Recon avg 0.79 -> 0.22,
+predfeat 0.93 -> 0.39; decoded frames become calmer/less artifact-y. Head ckpt
+format matches `viz_action_rollout.py`'s `GT_DEC_CKPT`. Note: for crisp pixels
+the dv3 head remains the bottleneck (even GT recon decodes soft vs raw) - a
+future in-domain high-res decoder / upsampler is the follow-up, separate from
+latent quality.
+
+Run commands (all env vars from `grandtour/env.sh`):
+```bash
+# train (GPU box)
+python "$JEPA_ENV_PY" -m app.main --devices cuda:0     --fname configs/vjepa_wm/grandtour_sweep/gt_v3_12f_fps5_r256_dv3vitl16_AdaLN_d12c_8roll_1n.yaml
+# rollout + decode (see gtcond/plan demos above)
+export GT_WM_TAG=gt_v3_12f_fps5_r256_dv3vitl16_AdaLN_d12c_8roll_1n
+export GT_DEC_CKPT=$JEPAWM_OSSCKPT/../oss_decs/vm2m_lpips_dv3vitl_256_INet.pth.tar
+python grandtour/scripts/viz_action_rollout.py
+# decoder fine-tune
+python grandtour/scripts/finetune_decoder.py
+```
+
+
 ## Checkpoints
 
 Trained checkpoints are published on Hugging Face (not committed here due to

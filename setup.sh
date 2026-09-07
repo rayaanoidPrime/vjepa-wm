@@ -37,6 +37,29 @@ echo "[4/5] install jepa-wms (editable, no deps) + curated deps"
 uv pip install --python "$PYBIN" --no-deps -e jepa-wms
 uv pip install --python "$PYBIN" -r requirements.in
 
+# Meta-internal 'clusterscope' is not on PyPI; provide a local shim that satisfies
+# jepa-wms/src/utils/cluster.py (used only as a dict key when JEPAWM_DSET is set).
+cat > "$VENV/lib/python3.10/site-packages/clusterscope.py" <<'STUB'
+import os
+
+
+def cluster() -> str:
+    return os.environ.get("CLUSTERSCOPE_CLUSTER", "default")
+
+
+def node_list() -> str:
+    return os.environ.get("SLURM_JOB_NODELIST", "localhost")
+
+
+def master_addr() -> str:
+    return os.environ.get("MASTER_ADDR", "127.0.0.1")
+STUB
+
+# Ship run configs (gt_v2/gt_v3 family) into the patched checkout.
+mkdir -p "$ROOT/jepa-wms/configs/vjepa_wm/grandtour_sweep"
+cp "$ROOT"/grandtour/configs/*.yaml "$ROOT/jepa-wms/configs/vjepa_wm/grandtour_sweep/"
+echo "    copied $(ls "$ROOT"/grandtour/configs/*.yaml | wc -l) grandtour configs into the checkout"
+
 echo "[5/5] data dirs + env file"
 mkdir -p data/raw data/datasets data/logs data/torchhub
 cat > grandtour/env.sh <<ENV

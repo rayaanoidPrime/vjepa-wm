@@ -53,6 +53,21 @@ python "$JEPAWM_HOME/../.venv/bin/python" -m app.main \
     --fname configs/vjepa_wm/grandtour_sweep/gt_v0_SMOKE.yaml --debug
 ```
 
+### Path A (DINOv3 latent space): gt_v2 / gt_v3
+
+The current recipes live under `grandtour/configs/` (copied into the patched
+checkout by `setup.sh`): `gt_v2_*` = DINOv3-ViT-L/16 @256 + AdaLN d12 causal +
+cosine loss + 4-roll; `gt_v3_*` = same + `normalize_reps` + L2-0.1 +
+8-step rollout. DINOv3 needs its backbone (download via
+`grandtour/scripts/fetch_dinov3.py`) and a local clone of
+`facebookresearch/dinov3` at `$JEPAWM_HOME/dinov3`.
+
+```bash
+python grandtour/scripts/fetch_dinov3.py                 # -> $JEPAWM_OSSCKPT/dinov3/
+git clone https://github.com/facebookresearch/dinov3.git $JEPAWM_HOME/dinov3
+python "$JEPA_ENV_PY" -m app.main --devices cuda:0 \n    --fname configs/vjepa_wm/grandtour_sweep/gt_v3_12f_fps5_r256_dv3vitl16_AdaLN_d12c_8roll_1n.yaml
+```
+
 ### 5) visualize: GT-action-conditioned future rollouts (final demo)
 
 ```bash
@@ -90,6 +105,9 @@ and visualization scripts under `grandtour/scripts/` reproduce them.
 | Eval (copy baseline) | `grandtour/scripts/eval_copy_baseline.py` (set `GT_RUN` to eval a scaled run) |
 | Counterfactual action eval (guide item 9) | `grandtour/scripts/eval_counterfactual.py` |
 | Action-rollout GIF/MP4s (final) | `grandtour/scripts/viz_action_rollout.py` (GT-action-conditioned or scripted plans, decoded with the published vm2m decoder) |
+| Path A run configs (dv3) | `grandtour/configs/gt_v{2,3}_*.yaml` (copied into the checkout by `setup.sh`) |
+| DINOv3 backbone fetch | `grandtour/scripts/fetch_dinov3.py` (public mirror of the gated dv3 weights) |
+| Decoder fine-tune (step-2b) | `grandtour/scripts/finetune_decoder.py` (warm-start the published dv3 decoder, adapt to predicted latents) |
 
 ## License notes
 

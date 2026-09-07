@@ -12,6 +12,8 @@ HOME = Path(os.environ.get("GT_HOME", str(_HOME)))
 JEPAWM_HOME = Path(os.environ.get("JEPAWM_HOME", str(HOME / "jepa-wms")))
 JEPAWM_DSET = Path(os.environ.get("JEPAWM_DSET", str(HOME / "data" / "datasets")))
 JEPAWM_LOGS = Path(os.environ.get("JEPAWM_LOGS", str(HOME / "data" / "logs")))
+JEPAWM_CKPT = Path(os.environ.get("JEPAWM_CKPT", str(JEPAWM_LOGS)))
+JEPAWM_OSSCKPT = Path(os.environ.get("JEPAWM_OSSCKPT", str(HOME / "data" / "ossckpt")))
 GT_RAW = Path(os.environ.get("GT_RAW", str(HOME / "data" / "raw")))
 GT_VIZ = Path(os.environ.get("GT_VIZ", str(JEPAWM_LOGS / "grandtour_sweep" / "viz")))
 TORCH_HOME = Path(os.environ.get("TORCH_HOME", str(HOME / "data" / "torchhub")))
@@ -32,6 +34,7 @@ def export_lines():
         f"JEPAWM_HOME={JEPAWM_HOME}",
         f"JEPAWM_DSET={JEPAWM_DSET}",
         f"JEPAWM_LOGS={JEPAWM_LOGS}",
+        f"JEPAWM_OSSCKPT={JEPAWM_OSSCKPT}",
         f"GT_RAW={GT_RAW}",
         f"TORCH_HOME={TORCH_HOME}",
         f"JEPA_ENV_PY={ENV_PY}",

@@ -28,6 +28,9 @@ plotly
 hydra-core
 omegaconf
 ruamel.yaml
+pyyaml
+zarr
+torchmetrics
 wandb
 submitit
 huggingface_hub
@@ -44,4 +47,3 @@ pygame
 pymunk==6.8.0
 shapely
 nevergrad
-clusterscope
