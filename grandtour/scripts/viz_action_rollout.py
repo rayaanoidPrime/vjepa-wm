@@ -158,7 +158,7 @@ def choose_window(ds, want):
     return cands[0][1], cands[0][2], cands[0][3]
 
 
-def load_window(ds, tr, ep, fstp, s0, length):
+def load_window(ds, tr, inv, ep, fstp, s0, length):
     """Frames, normalized actions and GT images for `length` fps5 frames from s0."""
     r = s0 + fstp * np.arange(length)
     with h5py.File(ep.path, "r") as h5:
@@ -199,11 +199,11 @@ def save(frames, name):
     print(f"saved {OUT}/{name}.mp4/.gif ({len(frames)} frames)", flush=True)
 
 
-def rollout(ds, tr, wm, head):
+def rollout(ds, tr, inv, wm, head):
     """Encode NCTX context frames, then generate NFUT frames one at a time from
     the action rows that follow the context (row t drives frame t+1)."""
     ep, fstp, s0 = choose_window(ds, NCTX + NFUT)
-    T, A, gt = load_window(ds, tr, ep, fstp, s0, NCTX + NFUT)
+    T, A, gt = load_window(ds, tr, inv, ep, fstp, s0, NCTX + NFUT)
     name = f"{_paths.Path(ep.path).parent.name}_{s0}"
     print(f"window: mission={name.rsplit('_', 1)[0]} start10hz={s0} "
           f"(cmd vx/yaw @ctx-last: {ep.cmd[s0 + fstp * (NCTX - 1)][0]:.2f}/"
@@ -234,7 +234,7 @@ def rollout(ds, tr, wm, head):
     return name
 
 
-def rollout_plan(ds, tr, wm, head):
+def rollout_plan(ds, tr, inv, wm, head):
     """Scripted twists with the joint state held from the context boundary."""
     plan = [tok.split() for tok in os.environ.get("GT_PLAN", "FWD 10").split(",")]
     segs = [(cmd, int(n)) for cmd, n in plan]
@@ -243,7 +243,7 @@ def rollout_plan(ds, tr, wm, head):
     N = len(seq)
     total = NCTX + N
     ep, fstp, s0 = choose_window(ds, total)
-    T, A, gt = load_window(ds, tr, ep, fstp, s0, total)
+    T, A, gt = load_window(ds, tr, inv, ep, fstp, s0, total)
     name = f"{_paths.Path(ep.path).parent.name}_{s0}"
     A = A.clone()
     for k in range(N):                                   # rows NCTX-1 .. NCTX-1+N-1
@@ -274,9 +274,9 @@ def main():
     assert "GT_DEC_CKPT" in os.environ, "set GT_DEC_CKPT to the decoder checkpoint"
     ds, tr, inv, wm, head = build()
     if MODE == "gt":
-        rollout(ds, tr, wm, head)
+        rollout(ds, tr, inv, wm, head)
     else:
-        rollout_plan(ds, tr, wm, head)
+        rollout_plan(ds, tr, inv, wm, head)
 
 
 if __name__ == "__main__":
